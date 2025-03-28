@@ -53,7 +53,7 @@ find_package(nanobind CONFIG REQUIRED)
 nanobind_add_module(
 
   # Name of the extension
-  odin_streaming_interface_c
+  odin_stream
 
   # domain name
   NB_DOMAIN burst_interface_domain
@@ -72,22 +72,22 @@ nanobind_add_module(
   NB_STATIC
 
   # Source code goes here
-  src/streaming_interface.c
-  src/streaming_payload.c
+  src/parameter_set.c
+  src/streaming_packet.c
   src/python_bindings.cpp
 )
 
 nanobind_add_stub(
   
-    odin_streaming_interface_c_stub
+    odin_stream_stub
     INSTALL_TIME
-    MODULE odin_streaming_interface_c
-    OUTPUT odin_streaming_interface_c.pyi
-    PYTHON_PATH $<TARGET_FILE_DIR:odin_streaming_interface_c>
-    DEPENDS odin_streaming_interface_c
+    MODULE odin_stream
+    OUTPUT odin_stream.pyi
+    PYTHON_PATH $<TARGET_FILE_DIR:odin_stream>
+    DEPENDS odin_stream
 )
 
-target_include_directories(odin_streaming_interface_c PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(odin_stream PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # Install directive for scikit-build-core
-install(TARGETS odin_streaming_interface_c LIBRARY DESTINATION ".")
+install(TARGETS odin_stream LIBRARY DESTINATION ".")

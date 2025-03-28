@@ -1,433 +1,508 @@
 #include <nanobind/nanobind.h>
-#include <nanobind/stl/string.h> // Required for string conversions (repr, setters)
-#include <nanobind/stl/vector.h> // Required for get_parameter_indices
-#include <nanobind/stl/list.h>   // For nb::list/iterable
-// #include <nanobind/cast.h>       // Not needed, nb::cast is included by nanobind.h
-#include <stdexcept> // For exceptions
-#include <string>    // For std::string, std::to_string
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
+#include <nanobind/stl/list.h>
+#include <stdexcept>
+#include <string>
 #include <vector>
-#include <cstdint> // For uint types
-#include <cstdlib> // For free() - needed due to missing C free function
-#include <sstream> // For building string in __repr__
-#include <iomanip> // For std::setw, std::setfill
+#include <cstdint>
+#include <sstream>
+#include <iomanip>
+#include <limits> // Required by MSVC for numeric_limits sometimes with nanobind
 
-// Assuming these C structs/functions are declared in this header
-extern "C"
-{
-#include "streaming_interface.h" // Defines fixed_size_parameter_t, streaming_parameterset_t
-#include "streaming_payload.h"   // Declares the streaming_payload_* functions
+// --- Include Refactored C API Headers ---
+extern "C" {
+#include "parameter_set.h"
+#include "streaming_packet.h"
 }
 
 namespace nb = nanobind;
 using namespace nb::literals;
 
-// --- Modifiable FixedSizeParameter wrapper (Updated Constructor) ---
-struct FixedSizeParameter
-{
-    nb::bytes              data_buffer; // Keep the Python bytes object alive
-    fixed_size_parameter_t parameter;   // The underlying C struct
+// === Helper Function for Status Checking ===
+// Converts C API status codes to Python exceptions
+inline void check_param_set_status(parameter_set_status_t status, const std::string& context = "") {
+    std::string prefix = context.empty() ? "" : context + ": ";
+    switch (status) {
+        case PARAM_SET_SUCCESS:
+            return; // No error
+        case PARAM_SET_E_NOMEM:
+            throw std::bad_alloc(); // Map to standard C++ exception
+        case PARAM_SET_E_FULL:
+            throw nb::index_error((prefix + "Parameter set is full.").c_str());
+        case PARAM_SET_E_DUPLICATE:
+            throw nb::value_error((prefix + "Parameter index already exists.").c_str());
+        case PARAM_SET_E_NOTFOUND:
+            throw nb::key_error((prefix + "Parameter index not found.").c_str()); // Map to key error
+        case PARAM_SET_E_INVALID:
+            throw nb::value_error((prefix + "Invalid argument (e.g., NULL pointer internally, or bad state).").c_str());
+        case PARAM_SET_E_INTERNAL:
+            throw std::runtime_error((prefix + "Internal parameter set inconsistency detected.").c_str());
+        default:
+            throw std::runtime_error((prefix + "Unknown parameter set error code: " + std::to_string(status)).c_str());
+    }
+}
 
-    // Constructor (Updated: derives size from data)
-    FixedSizeParameter(uint32_t index, nb::bytes data)
-        : data_buffer(std::move(data)) // Store the bytes object
-    {
-        parameter.index = index;
-        parameter.size  = data_buffer.size(); // Set size from the bytes object length
-        parameter.data
-            = (uint8_t *)data_buffer
-                  .c_str(); // Point to the stored buffer
-                            // Optional: Add printf for debugging if needed
-                            // printf("FixedSizeParameter created: index=%u, size=%u, data_ptr=%p, this=%p\n",
-                            //       parameter.index, parameter.size, parameter.data, this);
+inline void check_packet_status(int status, const std::string& context = "") {
+     std::string prefix = context.empty() ? "" : context + ": ";
+     // Handle positive return value (bytes written) as success for generation functions
+     if (status >= 0) {
+         return;
+     }
+     // Handle specific negative error codes
+     switch ((streaming_packet_status_t)status) {
+         case PACKET_SUCCESS: // Should have been caught by status >= 0
+             return;
+         case PACKET_E_INVALID:
+             throw nb::value_error((prefix + "Invalid argument (e.g., NULL pointer).").c_str());
+         case PACKET_E_BADSIZE:
+             throw nb::value_error((prefix + "Buffer size error (too small, too large, or inconsistent).").c_str());
+         case PACKET_E_BADTYPE:
+             throw nb::value_error((prefix + "Incorrect packet type found during parsing.").c_str());
+         case PACKET_E_BADHASH:
+             throw nb::value_error((prefix + "Parameter group hash mismatch during parsing.").c_str());
+         case PACKET_E_NODATA:
+             throw nb::value_error((prefix + "Required parameter data pointer is NULL.").c_str());
+         case PACKET_E_OVERFLOW:
+              throw nb::value_error((prefix + "Data size exceeds packet format limits.").c_str());
+         case PACKET_E_INTERNAL:
+              throw std::runtime_error((prefix + "Internal packet processing inconsistency.").c_str());
+         case PACKET_E_NOMEM:
+             throw std::bad_alloc(); // Map to standard C++ exception
+         default:
+             throw std::runtime_error((prefix + "Unknown packet processing error code: " + std::to_string(status)).c_str());
+     }
+}
+
+
+// === FixedSizeParameter Python Wrapper ===
+struct FixedSizeParameter {
+    // Store data in Python object to manage lifetime via Python GC
+    uint32_t index;
+    nb::bytes data_buffer;
+    // No raw C struct needed directly *if* we always reconstruct on C API calls
+
+    FixedSizeParameter(uint32_t idx, nb::bytes data)
+        : index(idx), data_buffer(std::move(data)) {}
+
+    // Getter/Setter for Index
+    uint32_t get_index() const { return index; }
+    void set_index(uint32_t new_index) { index = new_index; }
+
+    // Getter/Setter for Data
+    nb::bytes get_data() const { return data_buffer; }
+    void set_data(nb::bytes new_data) { data_buffer = std::move(new_data); }
+
+    // Getter for Size (derived from data)
+    uint32_t get_size() const { return (uint32_t)data_buffer.size(); }
+
+    // Helper to create the C struct on the fly when needed
+    fixed_size_parameter_t to_c_struct() const {
+        fixed_size_parameter_t c_param;
+        c_param.index = this->index;
+        c_param.size = this->get_size();
+        // NOTE: This pointer is only valid as long as data_buffer exists!
+        // C API calls using this must not store the pointer long-term.
+        c_param.data = (uint8_t *)this->data_buffer.c_str();
+        return c_param;
     }
 
-    // Prevent copying/moving for simplicity if managed primarily by Python's GC
-    FixedSizeParameter(const FixedSizeParameter &)            = delete;
-    FixedSizeParameter &operator=(const FixedSizeParameter &) = delete;
-    FixedSizeParameter(FixedSizeParameter &&)                 = delete;
-    FixedSizeParameter &operator=(FixedSizeParameter &&)      = delete;
-
-    // --- Getters ---
-    uint32_t get_index() const
-    {
-        return parameter.index;
-    }
-    uint32_t get_size() const
-    {
-        return parameter.size;
-    } // Getter for derived size
-    nb::bytes get_data_bytes() const
-    {
-        return data_buffer;
-    }
-
-    // --- Setters ---
-    void set_index(uint32_t index)
-    {
-        this->parameter.index = index;
-        // (Same warning about hash applies)
-    }
-
-    void set_data(nb::bytes data)
-    {
-        this->data_buffer = std::move(data);
-        // Update size and data pointer whenever data is set
-        this->parameter.size = this->data_buffer.size();
-        this->parameter.data = (uint8_t *)this->data_buffer.c_str();
-    }
-
-    // Internal access to the C struct (use with caution)
-    const fixed_size_parameter_t &get_c_struct() const
-    {
-        return parameter;
-    }
-    fixed_size_parameter_t &get_c_struct()
-    {
-        return parameter;
-    }
-
-    // __repr__ for FixedSizeParameter itself
-    std::string repr() const
-    {
+     // __repr__
+     std::string repr() const {
         std::stringstream ss;
-        ss << "FixedSizeParameter(index=" << parameter.index << ", size=" << parameter.size << ", data=b'";
+        ss << "FixedSizeParameter(index=" << index
+           << ", size=" << get_size() << ", data=b'";
         ss << std::hex << std::setfill('0');
-        for (size_t i = 0; i < data_buffer.size(); ++i)
-        {
-            ss << "\\x" << std::setw(2) << static_cast<int>(data_buffer.c_str()[i]);
+        const char* buf_data = data_buffer.c_str();
+        size_t buf_size = data_buffer.size();
+        for (size_t i = 0; i < buf_size; ++i) {
+            ss << "\\x" << std::setw(2) << static_cast<int>((unsigned char)buf_data[i]);
         }
         ss << "')";
         return ss.str();
-    }
+     }
 };
 
-// --- ParameterSet Class (Updated with Initialization Checks) ---
-class ParameterSet
-{
-private:
-    streaming_parameterset_t *parameterset_ = nullptr;
 
-    // --- Helper to check initialization ---
-    /**
-     * @brief Throws std::runtime_error if parameterset_ is null.
-     * Should be called at the beginning of methods operating on the set.
-     */
-    void check_initialized() const
-    {
-        if (!parameterset_)
-        {
-            throw std::runtime_error("ParameterSet is uninitialized or has been moved.");
+// === ParameterSet Python Wrapper (Manages parameter_set_t*) ===
+class ParameterSet {
+private:
+    parameter_set_t* pset_ptr = nullptr;
+
+    // Private constructor for adopting an existing pointer (e.g., from parse)
+    ParameterSet(parameter_set_t* adopted_ptr) : pset_ptr(adopted_ptr) {
+        if (!pset_ptr) {
+             // Should not happen if called correctly internally
+             throw std::runtime_error("Internal error: Tried to adopt a NULL parameter set pointer.");
+        }
+    }
+
+    // Helper to ensure pointer is valid before use
+    void check_initialized() const {
+        if (!pset_ptr) {
+            throw std::runtime_error("ParameterSet instance is uninitialized, has been moved, or destroyed.");
         }
     }
 
 public:
-    // Constructor
-    ParameterSet(int max_parameters)
-    {
-        parameterset_ = streaming_payload_new(max_parameters);
-        if (parameterset_ == nullptr)
-        {
-            // Constructor failed, throw allocation error
-            throw std::bad_alloc();
+    // Public Constructor
+    ParameterSet(size_t max_parameters) {
+        pset_ptr = parameter_set_create(max_parameters);
+        if (!pset_ptr) {
+            // parameter_set_create returns NULL on failure (incl. max_parameters=0)
+            throw std::bad_alloc(); // Or could throw ValueError for max_parameters=0
         }
-        // Optional: printf("ParameterSet created: ptr=%p, max=%d\n", parameterset_, max_parameters);
     }
 
-    // Destructor
-    ~ParameterSet()
-    {
-        if (parameterset_)
-        {
-            // printf("ParameterSet destroying: ptr=%p\n", parameterset_); // Debugging
-            // --- DANGER ZONE --- (Same warning as before applies about needing C free func)
-            if (parameterset_->parameters)
-            {
-                free(parameterset_->parameters);
-                parameterset_->parameters = nullptr;
-            }
-            free(parameterset_);
-            parameterset_ = nullptr;
-            // --- END DANGER ZONE ---
-        }
-        else
-        {
-            // printf("ParameterSet destructor called on null ptr\n"); // Debugging
+    // Destructor (RAII)
+    ~ParameterSet() {
+        if (pset_ptr) {
+            parameter_set_destroy(pset_ptr);
+            pset_ptr = nullptr;
         }
     }
 
     // --- Rule of 5 (Move semantics, Copy deleted) ---
-    ParameterSet(const ParameterSet &)            = delete;
-    ParameterSet &operator=(const ParameterSet &) = delete;
-    ParameterSet(ParameterSet &&other) noexcept
-        : parameterset_(other.parameterset_)
-    {
-        // printf("ParameterSet move constructing: from %p to %p\n", other.parameterset_, parameterset_); // Debug
-        other.parameterset_ = nullptr; // Prevent double free
+    ParameterSet(const ParameterSet&) = delete;
+    ParameterSet& operator=(const ParameterSet&) = delete;
+
+    ParameterSet(ParameterSet&& other) noexcept : pset_ptr(other.pset_ptr) {
+        other.pset_ptr = nullptr; // Source is now invalid
     }
-    ParameterSet &operator=(ParameterSet &&other) noexcept
-    {
-        // printf("ParameterSet move assigning: target=%p, source=%p\n", parameterset_, other.parameterset_); // Debug
-        if (this != &other)
-        {
-            // Free existing resource first (if any)
-            if (parameterset_)
-            {
-                if (parameterset_->parameters)
-                    free(parameterset_->parameters);
-                free(parameterset_);
-            }
-            // Transfer ownership
-            parameterset_ = other.parameterset_;
-            // Null out the source
-            other.parameterset_ = nullptr;
+    ParameterSet& operator=(ParameterSet&& other) noexcept {
+        if (this != &other) {
+            parameter_set_destroy(pset_ptr); // Destroy existing resource
+            pset_ptr = other.pset_ptr;       // Take ownership from source
+            other.pset_ptr = nullptr;       // Invalidate source
         }
         return *this;
     }
     // --- End Rule of 5 ---
 
-    // --- Wrapper Methods (with checks) ---
-    bool add(FixedSizeParameter &parameter)
-    {
-        check_initialized(); // Throw if not initialized
-        // Pass the address of the internal C struct from the wrapper
-        int result = streaming_payload_add(parameterset_, &parameter.get_c_struct());
-        return result == 0;
+    // --- Wrapped Methods ---
+
+    void add(const FixedSizeParameter& param) {
+        check_initialized();
+        fixed_size_parameter_t c_param = param.to_c_struct(); // Create C struct
+        parameter_set_status_t status = parameter_set_add(pset_ptr, c_param);
+        check_param_set_status(status, "Failed to add parameter"); // Throws on error
     }
 
-    int add_list(nb::iterable params)
-    {
-        check_initialized(); // Throw if not initialized before starting loop
-
-        int success_count = 0;
-        for (nb::handle item_handle : params)
-        {
-            FixedSizeParameter &param = nb::cast<FixedSizeParameter &>(item_handle);
-            // Call the checked single 'add' method
-            if (this->add(param))
-            {
-                success_count++;
-            }
-            else
-            {
-                // Add failed (e.g., full, duplicate) - stop or continue?
-                // Current behavior: continue adding others.
-            }
-
-            // No need for a generic std::exception catch here unless 'add' can throw others
+     void add_list(nb::iterable params) {
+        check_initialized();
+        for (nb::handle item_handle : params) {
+            // Get reference to Python wrapper object
+            const FixedSizeParameter& param_wrapper = nb::cast<const FixedSizeParameter&>(item_handle);
+            // Convert to C struct and call C add function (which throws on error via helper)
+            this->add(param_wrapper); // Re-use single add logic
         }
-        return success_count;
+        // No return value needed if add throws on failure
     }
 
-    bool remove(FixedSizeParameter &parameter)
-    {
-        check_initialized(); // Throw if not initialized
-        // Pass the address of the internal C struct from the wrapper
-        int result = streaming_payload_remove(parameterset_, &parameter.get_c_struct());
-        return result == 0;
+    void remove_by_index(uint32_t index) {
+        check_initialized();
+        parameter_set_status_t status = parameter_set_remove_by_index(pset_ptr, index);
+         check_param_set_status(status, "Failed to remove parameter by index");
     }
 
-    void clear()
-    {
-        check_initialized(); // Throw if not initialized
-        streaming_payload_clear(parameterset_);
+    void clear() {
+        check_initialized();
+        parameter_set_status_t status = parameter_set_clear(pset_ptr);
+        check_param_set_status(status, "Failed to clear parameter set");
     }
 
-    // --- Accessors (with checks) ---
-    int get_count() const
-    {
-        check_initialized(); // Throw if not initialized
-        return parameterset_->parameter_count;
+    void recalculate_hash() {
+        check_initialized();
+        parameter_set_status_t status = parameter_set_recalculate_hash(pset_ptr);
+        check_param_set_status(status, "Failed to recalculate hash");
     }
 
-    int get_max_count() const
-    {
-        check_initialized(); // Throw if not initialized
-        return parameterset_->parameter_count_max;
+    // --- Properties ---
+    size_t get_count() const {
+        check_initialized();
+        return pset_ptr->parameter_count;
     }
 
-    uint16_t get_hash() const
-    {
-        check_initialized(); // Throw if not initialized
-        return parameterset_->parameter_hash;
+    size_t get_max_count() const {
+        check_initialized();
+        return pset_ptr->parameter_count_max;
     }
 
-    std::vector<uint32_t> get_parameter_indices() const
-    {
-        check_initialized(); // Throw if not initialized
+     uint16_t get_hash() const {
+        check_initialized();
+        return pset_ptr->parameter_hash;
+    }
+
+    // Note: Returning indices is safe as it doesn't involve data pointers
+    std::vector<uint32_t> get_indices() const {
+        check_initialized();
         std::vector<uint32_t> indices;
-        // Reserve space based on current count
-        indices.reserve(parameterset_->parameter_count);
-        for (int i = 0; i < parameterset_->parameter_count; ++i)
-        {
-            // Basic safety check for the pointer itself before dereferencing
-            if (parameterset_->parameters && parameterset_->parameters[i])
-            {
-                indices.push_back(parameterset_->parameters[i]->index);
-            }
-            else
-            {
-                // This case indicates an internal inconsistency if count > 0
-                // but pointers are null. Could throw an internal error here too.
+        if (pset_ptr->parameters) { // Basic sanity check
+            indices.reserve(pset_ptr->parameter_count);
+            for (size_t i = 0; i < pset_ptr->parameter_count; ++i) {
+                indices.push_back(pset_ptr->parameters[i].index);
             }
         }
         return indices;
     }
-    /**
-     * @brief Generates the identifier packet for the current parameter set.
-     *
-     * @return nb::bytes object containing the generated packet data.
-     */
-    nb::bytes generate_identifier_packet() const
-    {
+
+    // --- Packet Generation ---
+    nb::bytes generate_identifier_packet() const {
         check_initialized();
+        // Estimate size needed (can be slightly larger if count changes, but safe)
+        size_t max_possible_size = sizeof(streaming_packet_header_t) +
+                                   pset_ptr->parameter_count_max * sizeof(ident_payload_item_t);
+        std::vector<uint8_t> buffer(max_possible_size);
 
-        // Calculate required buffer size
-        size_t required_size
-            = sizeof(streaming_packet_header_t) + (size_t)parameterset_->parameter_count * sizeof(uint32_t);
+        int bytes_written_or_err = streaming_packet_create_identifier(
+            pset_ptr, buffer.data(), buffer.size());
 
-        // Allocate buffer
-        std::vector<uint8_t> buffer(required_size);
+        check_packet_status(bytes_written_or_err, "Failed to generate identifier packet");
 
-        // Call the C function
-        int bytes_written = streaming_interface_generate_identifier_packet(
-            parameterset_, buffer.data(), static_cast<int>(buffer.size()));
-
-        // Basic check: C function should return the calculated size
-        if (bytes_written < 0 || static_cast<size_t>(bytes_written) != required_size)
-        {
-            throw std::runtime_error("Identifier packet generation failed or returned unexpected size. Expected="
-                                     + std::to_string(required_size) + ", Got=" + std::to_string(bytes_written));
-        }
-
-        // Return data as Python bytes
-        return nb::bytes(buffer.data(), bytes_written);
+        // Return only the bytes actually written
+        return nb::bytes(buffer.data(), bytes_written_or_err);
     }
 
-    /**
-     * @brief Generates the data packet for the current parameter set with a timestamp.
-     *
-     * @param timestamp The timestamp to include in the data packet header.
-     * @return nb::bytes object containing the generated packet data.
-     * @throws std::runtime_error if buffer overflow occurs during C function call.
-     */
-    nb::bytes generate_data_packet(uint32_t timestamp) const
-    {
+     nb::bytes generate_data_packet(uint32_t timestamp) const {
         check_initialized();
-
-        // Calculate required buffer size by summing parameter sizes
-        size_t data_payload_size = 0;
-        for (int i = 0; i < parameterset_->parameter_count; ++i)
-        {
-            if (parameterset_->parameters && parameterset_->parameters[i])
-            {
-                data_payload_size += parameterset_->parameters[i]->size;
-            }
-            else
-            {
-                throw std::logic_error("Internal error: Null parameter pointer found in ParameterSet.");
-            }
+        // Calculate exact required size
+        size_t required_payload_size = 0;
+        if (pset_ptr->parameters) {
+             for (size_t i = 0; i < pset_ptr->parameter_count; ++i) {
+                  if (!pset_ptr->parameters[i].data) {
+                       throw nb::value_error(("Cannot generate data packet: Parameter with index "
+                           + std::to_string(pset_ptr->parameters[i].index) + " has NULL data pointer in set definition.").c_str());
+                  }
+                 required_payload_size += pset_ptr->parameters[i].size;
+             }
         }
-        size_t required_size = sizeof(streaming_data_header_t) + data_payload_size;
+        size_t required_total_size = sizeof(streaming_data_header_t) + required_payload_size;
 
-        // Allocate buffer
-        std::vector<uint8_t> buffer(required_size);
+        std::vector<uint8_t> buffer(required_total_size);
 
-        // Call the C function
-        int bytes_written = streaming_interface_generate_data_packet(
-            parameterset_, buffer.data(), static_cast<int>(buffer.size()), timestamp);
+        int bytes_written_or_err = streaming_packet_create_data(
+            pset_ptr, buffer.data(), buffer.size(), timestamp);
 
-        // Check for errors reported by the C function
-        if (bytes_written < 0)
-        {
-            // The C function signals buffer overflow with -1
-            throw std::runtime_error("Buffer overflow during data packet generation (internal error). Required size: "
-                                     + std::to_string(required_size)
-                                     + ", Reported error code: " + std::to_string(bytes_written));
-        }
+         check_packet_status(bytes_written_or_err, "Failed to generate data packet");
 
-        // Optional: Sanity check size. For data packets, it should match required_size.
-        if (static_cast<size_t>(bytes_written) != required_size)
-        {
-            throw std::runtime_error("Data packet generation returned unexpected size. Expected="
-                                     + std::to_string(required_size) + ", Got=" + std::to_string(bytes_written));
-        }
+         // Should match required size if successful
+         assert((size_t)bytes_written_or_err == required_total_size);
 
-        // Return data as Python bytes
-        // Note: Using bytes_written which should equal required_size if no error occurred
-        return nb::bytes(buffer.data(), bytes_written);
+         return nb::bytes(buffer.data(), bytes_written_or_err);
     }
 
-    // --- __repr__ Implementation (with check) ---
-    std::string repr() const
-    {
-        // Keep the specific repr for null state, or throw? Let's throw for consistency.
-        check_initialized(); // Throw if not initialized
+    // --- Parsing (Class Method) ---
+    // Note: We need a way for the Python class to call this C++ static method
+    // And this method needs to return a ParameterSet instance (Python wrapper)
+    static ParameterSet parse_identifier_packet(nb::bytes data) {
+        const uint8_t* buf_ptr = (const uint8_t*) data.c_str();
+        size_t buf_size = data.size();
 
+        parameter_set_t* new_pset_ptr = streaming_packet_parse_identifier(buf_ptr, buf_size);
+
+        if (!new_pset_ptr) {
+            // streaming_packet_parse_identifier returns NULL on error
+            // Need to determine *why* - was it bad format, size, alloc?
+            // For now, raise a generic error. Could add more detailed C API errors later.
+             throw nb::value_error("Failed to parse identifier packet (invalid format, size, type, or memory allocation failed).");
+        }
+        // Success! Create a Python wrapper adopting the pointer.
+        // Use the private constructor. Need friendship or a public static factory.
+        // Let's use a public static factory method inside ParameterSet for adoption.
+        return ParameterSet(new_pset_ptr); // Use private constructor
+    }
+
+    // ... existing methods (add, add_list, remove, clear, recalculate_hash, properties) ...
+    // ... existing packet generation methods (generate_identifier_packet, generate_data_packet) ...
+
+    // --- NEW: Safe Data Packet Parsing Method ---
+
+    /**
+     * @brief Parses a data packet, verifies it against the set, and returns data segments.
+     *
+     * Checks the packet header (type, hash) against the current ParameterSet state.
+     * Verifies the packet size matches the total expected data size for the parameters in this set.
+     * If all checks pass, extracts the data payload corresponding to each parameter
+     * defined in this set and returns them as a list of new bytes objects.
+     *
+     * @param data The Python bytes object containing the data packet.
+     * @return A list of Python bytes objects, one for each parameter in the set's defined order.
+     * @throws nb::value_error or std::runtime_error on validation failure (bad type, hash, size).
+     * @throws std::logic_error if the ParameterSet instance has internal inconsistencies.
+     */
+    std::vector<nb::bytes> parse_data_packet(nb::bytes data) const {
+        check_initialized(); // Ensure pset_ptr is valid
+
+        const uint8_t* buffer_ptr = (const uint8_t*) data.c_str();
+        const size_t buffer_size = data.size();
+
+        // --- Perform Checks similar to C 'streaming_packet_parse_data' ---
+
+        // Check minimum size for header
+        if (buffer_size < sizeof(streaming_data_header_t)) {
+             throw nb::value_error("Input data too small to contain data packet header.");
+        }
+
+        // Check header type
+        const streaming_data_header_t *header = (const streaming_data_header_t *)buffer_ptr;
+        if (header->type != STREAMING_PACKET_TYPE_DATA) {
+            throw nb::value_error("Incorrect packet type");
+        }
+
+        // Check hash match (consider if recalculation is needed)
+        // parameter_set_recalculate_hash(pset_ptr); // Maybe? Or trust stored hash.
+        if (header->parameter_group_hash != pset_ptr->parameter_hash) {
+            throw nb::value_error("Packet hash mismatch");
+        }
+
+        // Check if buffer size matches expected size based on pset definition
+        size_t expected_payload_size = 0;
+        if (pset_ptr->parameters) {
+            for (size_t i = 0; i < pset_ptr->parameter_count; ++i) {
+                // NOTE: We don't check parameter[i].data here, only size,
+                // as we are reading *from* the packet, not writing *to* the pset.
+                expected_payload_size += pset_ptr->parameters[i].size;
+            }
+        } else if (pset_ptr->parameter_count > 0) {
+             throw std::logic_error("Internal error: ParameterSet count > 0 but parameters array is NULL.");
+        }
+        size_t expected_total_size = sizeof(streaming_data_header_t) + expected_payload_size;
+
+        if (buffer_size != expected_total_size) {
+            throw nb::value_error("Packet size mismatch");
+        }
+
+        // --- Checks passed, extract data ---
+
+        std::vector<nb::bytes> result_data;
+        result_data.reserve(pset_ptr->parameter_count);
+
+        const uint8_t *payload_ptr = buffer_ptr + sizeof(streaming_data_header_t);
+        const uint8_t *buffer_end = buffer_ptr + buffer_size; // For bounds checking
+
+        if (pset_ptr->parameters) {
+            for (size_t i = 0; i < pset_ptr->parameter_count; ++i) {
+                size_t param_size = pset_ptr->parameters[i].size;
+
+                // Bounds check before creating bytes object
+                if (payload_ptr + param_size > buffer_end) {
+                     throw std::logic_error("Internal error: Calculated read past end of buffer during data extraction.");
+                }
+
+                // Create a *new* nb::bytes object by copying the data slice
+                result_data.emplace_back(nb::bytes(payload_ptr, param_size));
+
+                payload_ptr += param_size;
+            }
+        }
+
+        // Sanity check: did we consume the whole payload exactly?
+        assert(payload_ptr == buffer_end);
+
+        // Nanobind automatically converts std::vector<nb::bytes> to a Python list
+        return result_data;
+    }
+
+    // --- Representation ---
+    std::string repr() const {
+        if (!pset_ptr) {
+            return "<ParameterSet (moved or destroyed)>";
+        }
         std::stringstream ss;
-        ss << "<ParameterSet count=" << parameterset_->parameter_count << ", max=" << parameterset_->parameter_count_max
-           << ", hash=0x" << std::hex << std::setw(4) << std::setfill('0') << parameterset_->parameter_hash << ">";
+        ss << "<ParameterSet count=" << pset_ptr->parameter_count
+           << ", max=" << pset_ptr->parameter_count_max
+           << ", hash=0x" << std::hex << std::setw(4) << std::setfill('0')
+           << pset_ptr->parameter_hash << ">";
         return ss.str();
     }
+
 }; // End of ParameterSet class
 
-// --- Nanobind Module Definition ---
-NB_MODULE(odin_streaming_interface_c, m)
-{ // Use your desired module name
 
-    // --- Bind MODIFIABLE FixedSizeParameter (Updated) ---
-    nb::class_<FixedSizeParameter>(m, "FixedSizeParameter")
-        // Updated init: only index and data
-        .def(nb::init<uint32_t, nb::bytes>(),
-             "index"_a,
-             "data"_a,
-             "Creates a parameter, size is derived from data length.")
-        // Read-write properties
-        .def_prop_rw(
-            "index", &FixedSizeParameter::get_index, &FixedSizeParameter::set_index, "Parameter index (uint32)")
-        .def_prop_rw("data",
-                     &FixedSizeParameter::get_data_bytes,
-                     &FixedSizeParameter::set_data,
+// --- Nanobind Module Definition ---
+NB_MODULE(odin_stream, m) { // Choose a suitable module name
+
+    m.doc() = "Python bindings for the Odin Streaming C API (ParameterSet and Packet Generation)";
+
+    // --- Bind Status Enums ---
+    nb::enum_<parameter_set_status_t>(m, "ParameterSetStatus")
+        .value("SUCCESS", PARAM_SET_SUCCESS)
+        .value("E_NOMEM", PARAM_SET_E_NOMEM)
+        .value("E_FULL", PARAM_SET_E_FULL)
+        .value("E_DUPLICATE", PARAM_SET_E_DUPLICATE)
+        .value("E_NOTFOUND", PARAM_SET_E_NOTFOUND)
+        .value("E_INVALID", PARAM_SET_E_INVALID)
+        .value("E_INTERNAL", PARAM_SET_E_INTERNAL)
+        .export_values();
+
+    nb::enum_<streaming_packet_status_t>(m, "StreamingPacketStatus")
+        .value("SUCCESS", PACKET_SUCCESS)
+        .value("E_INVALID", PACKET_E_INVALID)
+        .value("E_BADSIZE", PACKET_E_BADSIZE)
+        .value("E_BADTYPE", PACKET_E_BADTYPE)
+        .value("E_BADHASH", PACKET_E_BADHASH)
+        .value("E_NODATA", PACKET_E_NODATA)
+        .value("E_OVERFLOW", PACKET_E_OVERFLOW)
+        .value("E_INTERNAL", PACKET_E_INTERNAL)
+        .value("E_NOMEM", PACKET_E_NOMEM)
+        .export_values();
+
+     // --- Bind FixedSizeParameter Wrapper ---
+    nb::class_<FixedSizeParameter>(m, "FixedSizeParameter", "Wrapper for parameter descriptor (index/data)")
+        .def(nb::init<uint32_t, nb::bytes>(), "index"_a, "data"_a,
+             "Create a parameter descriptor. Size is derived from data.")
+        .def_prop_rw("index", &FixedSizeParameter::get_index, &FixedSizeParameter::set_index,
+                     "Parameter index (uint32)")
+        .def_prop_rw("data", &FixedSizeParameter::get_data, &FixedSizeParameter::set_data,
                      "Parameter data (bytes), updates size implicitly.")
-        // Read-only size property (derived from data)
-        .def_prop_ro("size", &FixedSizeParameter::get_size, "Size of parameter data (derived from data length).")
-        // Bind the __repr__ method
+        .def_prop_ro("size", &FixedSizeParameter::get_size, // Read-only size
+                     "Size of parameter data in bytes (derived from data).")
         .def("__repr__", &FixedSizeParameter::repr);
 
-    // --- Bind the ParameterSet Wrapper ---
-    nb::class_<ParameterSet>(m, "ParameterSet")
-        .def(nb::init<int>(), "max_parameters"_a, "Creates a new parameter set with a maximum capacity.")
-        // Methods
-        .def("add",
-             &ParameterSet::add,
-             "parameter"_a,
-             nb::rv_policy::reference_internal,
-             "Adds a single parameter. Returns True on success, False if full/duplicate.")
-        .def("add_list",
-             &ParameterSet::add_list,
-             "parameters"_a,
-             "Adds parameters from a Python list/iterable. Returns number successfully added.")
-        .def("remove",
-             &ParameterSet::remove,
-             "parameter"_a,
-             "Removes a parameter. Returns True on success, False if not found.")
-        .def("clear", &ParameterSet::clear, "Removes all parameters from the set.")
-        // Read-only Properties (now throw if object was moved)
+    // --- Bind ParameterSet Wrapper ---
+    nb::class_<ParameterSet>(m, "ParameterSet", "Manages a set of streaming parameters")
+        .def(nb::init<size_t>(), "max_parameters"_a,
+             "Create a new, empty parameter set with a maximum capacity.")
+        // Methods (throwing exceptions on C API errors)
+        .def("add", &ParameterSet::add, "parameter"_a, nb::rv_policy::reference_internal, // param must outlive set
+             "Add a parameter descriptor (FixedSizeParameter) to the set.")
+        .def("add_list", &ParameterSet::add_list, "parameters"_a,
+             "Add multiple parameter descriptors from a Python iterable.")
+        .def("remove_by_index", &ParameterSet::remove_by_index, "index"_a,
+             "Remove a parameter from the set by its index.")
+        .def("clear", &ParameterSet::clear, "Remove all parameters from the set.")
+        .def("recalculate_hash", &ParameterSet::recalculate_hash,
+             "Force recalculation of the internal parameter hash (usually not needed).")
+        // Packet Generation
+        .def("generate_identifier_packet", &ParameterSet::generate_identifier_packet,
+             "Generate the identifier packet for this set as bytes.")
+        .def("generate_data_packet", &ParameterSet::generate_data_packet, "timestamp"_a,
+             "Generate the data packet for this set as bytes, including a timestamp.")
+        // Properties (read-only)
         .def_prop_ro("count", &ParameterSet::get_count, "Current number of parameters.")
         .def_prop_ro("max_count", &ParameterSet::get_max_count, "Maximum capacity.")
-        .def_prop_ro("hash", &ParameterSet::get_hash, "Current parameter index hash.")
-        .def_prop_ro(
-            "indices", &ParameterSet::get_parameter_indices, "List of indices of parameters currently in the set.")
-        // Pythonic length and representation (now throw if object was moved)
+        .def_prop_ro("hash", &ParameterSet::get_hash, "Current parameter index hash (CRC16).")
+        .def_prop_ro("indices", &ParameterSet::get_indices, "List of indices currently in the set.")
+        // Special methods
         .def("__len__", &ParameterSet::get_count)
         .def("__repr__", &ParameterSet::repr)
 
-        // --- Bind NEW Packet Generation Methods ---
-        .def("generate_identifier_packet",
-             &ParameterSet::generate_identifier_packet,
-             "Generates the identifier packet for the current set as bytes.")
-        .def("generate_data_packet",
-             &ParameterSet::generate_data_packet,
-             "timestamp"_a,
-             "Generates the data packet for the current set with a timestamp as bytes.");
+
+        // --- Bind NEW Data Parsing Method ---
+        .def("parse_data_packet", &ParameterSet::parse_data_packet, "data"_a,
+             "Parses a data packet (bytes), verifies against the set definition,\n"
+             "and returns a list of bytes objects containing the data for each parameter.")
+
+        // Class method for parsing
+        // Note: nb::classmethod requires C++17. Need static method binding otherwise.
+        // Using static method binding here for broader compatibility.
+         .def_static("parse_identifier_packet", &ParameterSet::parse_identifier_packet, "data"_a,
+                     "Parse an identifier packet (bytes) and create a new ParameterSet instance.");
+         // .def_classmethod("parse_identifier_packet", &ParameterSet::parse_identifier_packet, "data"_a,
+         //            "Parse an identifier packet (bytes) and create a new ParameterSet instance."); // C++17 way
+
+        // NOTE: Did not bind streaming_packet_parse_data as it requires careful
+        // management of pre-allocated buffers within the Python FixedSizeParameter objects,
+        // which adds significant complexity and safety concerns to the wrapper design.
 
 } // End of NB_MODULE
