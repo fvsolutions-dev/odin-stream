@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python C++ Debug",
+      "type": "pythoncpp",
+      "request": "launch",
+      "pythonLaunchName": "Python: Current File",
+      "cppAttachName": "(Windows) Attach",
+    },
+    {
+      "name": "(Windows) Attach",
+      "type": "cppvsdbg",
+      "request": "attach",
+      "processId": ""
+    },
+    {
+      "name": "Python: Current File",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "test/test_burst.py",
+      "console": "integratedTerminal"
+    }
+  ]
+}

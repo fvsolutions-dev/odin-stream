@@ -1,0 +1,7 @@
+build
+.venv
+*.whl
+poetry.lock
+**.pyc
+.coverage
+*.tar.gz
