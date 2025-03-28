@@ -1,14 +1,14 @@
 name: Wheels
 
 on:
-  workflow_dispatch:
+  # workflow_dispatch:
   # pull_request:
-  # push:
-  #   branches:
-  #    - master
-  release:
-    types:
-      - published
+  push:
+    branches:
+     - master
+  # release:
+  #   types:
+  #     - published
 
 jobs:
   build_sdist:
@@ -30,6 +30,32 @@ jobs:
         name: dist-sdist
         path: dist/*.tar.gz
 
+  build_wheels_ubuntu:
+    name: Wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - uses: pypa/cibuildwheel@v2.22
+      env:
+        CIBW_BUILD: "cp312-manylinux_x86_64"
+
+    - name: Verify clean directory
+      run: git diff --exit-code
+      shell: bash
+
+    - name: Upload wheels
+      uses: actions/upload-artifact@v4
+      with:
+        path: wheelhouse/*.whl
+        name: dist-${{ matrix.os }}
 
   build_wheels:
     name: Wheels on ${{ matrix.os }}
