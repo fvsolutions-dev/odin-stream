@@ -72,14 +72,9 @@ void decoding_manager_parse_packet(decoding_manager_t *manager, uint8_t *data, s
             // No space for new packet id, ignore packet
             return;
         }
+        parameter_set_t *parameter_set = streaming_packet_parse_identifier(data, length);
 
-        // Add new packet id to list
-        header_set_t parsed_header = (header_set_t){
-            .packet_identifier = header->identifier,
-            .parameter_set = streaming_packet_parse_identifier(data, length),
-        };
-
-        if (parsed_header.parameter_set == NULL)
+        if (parameter_set == NULL)
         {
             // Failed to parse identifier packet, ignore it
             printf("Failed to parse identifier packet\n");
@@ -87,32 +82,35 @@ void decoding_manager_parse_packet(decoding_manager_t *manager, uint8_t *data, s
         }
 
         // Find and populate the parameters
-        for (size_t i = 0; i < parsed_header.parameter_set->parameter_count; i++)
+        for (size_t i = 0; i < parameter_set->parameter_count; i++)
         {
-            int id = parsed_header.parameter_set->parameters[i].index;
+            int id = parameter_set->parameters[i].index;
             const ODIN_parameter_t *param = ODIN_get_parameter_by_id(group, id, 0);
             if (param == NULL)
             {
                 printf("Parameter %d not found in group\n", id);
-                parameter_set_destroy(parsed_header.parameter_set);
+                parameter_set_destroy(parameter_set);
 
                 return;
             }
 
             // Check if the size matches
-            if (parsed_header.parameter_set->parameters[i].size != ODIN_get_max_data_size(param))
+            if (parameter_set->parameters[i].size != ODIN_get_max_data_size(param))
             {
                 printf("Parameter %d size mismatch\n", id);
-                parameter_set_destroy(parsed_header.parameter_set);
+                parameter_set_destroy(parameter_set);
                 return;
             }
 
             // Add the parameter to the data field
-            parsed_header.parameter_set->parameters[i].data = param->data;
+            parameter_set->parameters[i].data = param->data;
         }
 
         // Add the new header set to the manager
-        manager->data[manager->count] = parsed_header;
+        manager->data[manager->count] = (header_set_t){
+            .packet_identifier = header->identifier,
+            .parameter_set = parameter_set,
+        };
         manager->count++;
         break;
 
@@ -123,6 +121,7 @@ void decoding_manager_parse_packet(decoding_manager_t *manager, uint8_t *data, s
             // No matching identifier packet, ignore data packet
             return;
         }
+
         streaming_packet_status_t status = streaming_packet_parse_data(data, length, header_set->parameter_set);
         if (status != PACKET_SUCCESS)
         {
