@@ -21,44 +21,48 @@
  */
 int streaming_packet_create_identifier(const parameter_set_t *pset, uint8_t *buffer, size_t buffer_size)
 {
-    if (!pset || !buffer) {
+    if (!pset || !buffer)
+    {
         return PACKET_E_INVALID;
     }
-     if (!pset->parameters && pset->parameter_count > 0) {
+    if (!pset->parameters && pset->parameter_count > 0)
+    {
         return PACKET_E_INTERNAL; // Inconsistent state
     }
 
     // Calculate required size *before* writing anything
     size_t required_payload_size = pset->parameter_count * sizeof(ident_payload_item_t);
-    size_t required_total_size = sizeof(streaming_packet_header_t) + required_payload_size;
+    size_t required_total_size   = sizeof(streaming_identifier_packet_header_t) + required_payload_size;
 
-    if (buffer_size < required_total_size) {
+    if (buffer_size < required_total_size)
+    {
         return PACKET_E_BADSIZE; // Buffer too small
     }
 
     // Write payload (parameter index/size items)
-    uint8_t *payload_ptr = buffer + sizeof(streaming_packet_header_t);
-    for (size_t i = 0; i < pset->parameter_count; i++) {
-         const fixed_size_parameter_t* parameter = &pset->parameters[i];
-         ident_payload_item_t item;
-         item.index = parameter->index;
+    uint8_t *payload_ptr = buffer + sizeof(streaming_identifier_packet_header_t);
+    for (size_t i = 0; i < pset->parameter_count; i++)
+    {
+        const fixed_size_parameter_t *parameter = &pset->parameters[i];
+        ident_payload_item_t          item;
+        item.index = parameter->index;
 
-         // Ensure size fits in uint16_t for the packet item
-         if (parameter->size > UINT16_MAX) {
-             return PACKET_E_OVERFLOW; // Parameter size too large for packet format
-         }
-         item.size = (uint16_t)parameter->size;
+        // Ensure size fits in uint16_t for the packet item
+        if (parameter->size > UINT16_MAX)
+        {
+            return PACKET_E_OVERFLOW; // Parameter size too large for packet format
+        }
+        item.size = (uint16_t)parameter->size;
 
-         memcpy(payload_ptr, &item, sizeof(ident_payload_item_t));
-         payload_ptr += sizeof(ident_payload_item_t);
+        memcpy(payload_ptr, &item, sizeof(ident_payload_item_t));
+        payload_ptr += sizeof(ident_payload_item_t);
     }
 
     // Write header
-    streaming_packet_header_t *header = (streaming_packet_header_t *)buffer;
-    header->type                      = STREAMING_PACKET_TYPE_IDENTIFIER;
-    header->parameter_group_hash      = pset->parameter_hash;
-    header->reserved                  = 0;
-    header->odin_definition_hash      = 0xDEADBEEF; // TODO: Replace with actual definition hash
+    streaming_identifier_packet_header_t *header = (streaming_identifier_packet_header_t *)buffer;
+    header->header.type                          = STREAMING_PACKET_TYPE_IDENTIFIER;
+    header->header.identifier                    = pset->parameter_hash;
+    header->odin_definition_id                   = 0xDEADBEEF; // TODO: Replace with actual definition hash
 
     // Return bytes written (cast is safe as required_total_size was checked against buffer_size)
     return (int)required_total_size;
@@ -85,47 +89,53 @@ int streaming_packet_create_identifier(const parameter_set_t *pset, uint8_t *buf
  */
 parameter_set_t *streaming_packet_parse_identifier(const uint8_t *buffer, size_t buffer_size)
 {
-     if (!buffer) {
+    if (!buffer)
+    {
         return NULL; // Invalid argument
     }
 
-    if (buffer_size < sizeof(streaming_packet_header_t)) {
+    if (buffer_size < sizeof(streaming_identifier_packet_header_t))
+    {
         return NULL; // Buffer too small for header
     }
 
-    const streaming_packet_header_t *header = (const streaming_packet_header_t *)buffer;
-    if (header->type != STREAMING_PACKET_TYPE_IDENTIFIER) {
+    const streaming_identifier_packet_header_t *header = (const streaming_identifier_packet_header_t *)buffer;
+    if (header->header.type != STREAMING_PACKET_TYPE_IDENTIFIER)
+    {
         return NULL; // Invalid packet type
     }
 
     // Calculate expected payload size and parameter count
-    size_t payload_size = buffer_size - sizeof(streaming_packet_header_t);
-    if ((payload_size % sizeof(ident_payload_item_t)) != 0) {
+    size_t payload_size = buffer_size - sizeof(streaming_identifier_packet_header_t);
+    if ((payload_size % sizeof(ident_payload_item_t)) != 0)
+    {
         return NULL; // Payload size not a multiple of item size
     }
     size_t parameter_count = payload_size / sizeof(ident_payload_item_t);
 
     // Create a new parameter set (handles parameter_count == 0 case)
     parameter_set_t *pset = parameter_set_create(parameter_count);
-    if (!pset) {
+    if (!pset)
+    {
         return NULL; // Allocation failed
     }
 
     // Set hash and count directly (bypass update_hash as we fill from packet)
-    pset->parameter_hash = header->parameter_group_hash;
+    pset->parameter_hash  = header->header.identifier;
     pset->parameter_count = parameter_count;
     // pset->parameter_count_max is already set correctly by _create
 
     // Parse parameter items from payload into the newly created set
-    const uint8_t *item_ptr = buffer + sizeof(streaming_packet_header_t);
-    for (size_t i = 0; i < parameter_count; i++) {
+    const uint8_t *item_ptr = buffer + sizeof(streaming_identifier_packet_header_t);
+    for (size_t i = 0; i < parameter_count; i++)
+    {
         const ident_payload_item_t *item = (const ident_payload_item_t *)item_ptr;
 
         // Create parameter struct - data pointer is NULL for header packets
         // Directly place into allocated array, no need for _add checks
         pset->parameters[i].index = item->index;
-        pset->parameters[i].size = item->size;
-        pset->parameters[i].data = NULL;
+        pset->parameters[i].size  = item->size;
+        pset->parameters[i].data  = NULL;
 
         item_ptr += sizeof(ident_payload_item_t);
     }
@@ -157,35 +167,38 @@ parameter_set_t *streaming_packet_parse_identifier(const uint8_t *buffer, size_t
  * @return PACKET_E_NODATA if any parameter in the set has a NULL data pointer.
  * @return PACKET_E_BADSIZE if buffer_size is insufficient for the header and all parameter data.
  */
-int streaming_packet_create_data(const parameter_set_t *pset,
-                                 uint8_t *buffer,
-                                 size_t buffer_size,
-                                 uint32_t timestamp)
+int streaming_packet_create_data(const parameter_set_t *pset, uint8_t *buffer, size_t buffer_size, uint32_t timestamp)
 {
-    if (!pset || !buffer) {
+    if (!pset || !buffer)
+    {
         return PACKET_E_INVALID;
     }
-     if (!pset->parameters && pset->parameter_count > 0) {
+    if (!pset->parameters && pset->parameter_count > 0)
+    {
         return PACKET_E_INTERNAL; // Inconsistent state
     }
 
     // Calculate required payload size first & check data pointers
     size_t required_payload_size = 0;
-    for (size_t i = 0; i < pset->parameter_count; i++) {
-        if (!pset->parameters[i].data) {
-             return PACKET_E_NODATA; // Cannot serialize parameter with NULL data
+    for (size_t i = 0; i < pset->parameter_count; i++)
+    {
+        if (!pset->parameters[i].data)
+        {
+            return PACKET_E_NODATA; // Cannot serialize parameter with NULL data
         }
         required_payload_size += pset->parameters[i].size;
     }
-    size_t required_total_size = sizeof(streaming_data_header_t) + required_payload_size;
+    size_t required_total_size = sizeof(streaming_data_packet_header_t) + required_payload_size;
 
-    if (buffer_size < required_total_size) {
+    if (buffer_size < required_total_size)
+    {
         return PACKET_E_BADSIZE; // Buffer too small
     }
 
     // Write payload data by concatenating parameter data
-    uint8_t *payload_ptr = buffer + sizeof(streaming_data_header_t);
-    for (size_t i = 0; i < pset->parameter_count; i++) {
+    uint8_t *payload_ptr = buffer + sizeof(streaming_data_packet_header_t);
+    for (size_t i = 0; i < pset->parameter_count; i++)
+    {
         const fixed_size_parameter_t *parameter = &pset->parameters[i];
         // Data pointer was checked above
         assert(parameter->data != NULL);
@@ -194,11 +207,10 @@ int streaming_packet_create_data(const parameter_set_t *pset,
     }
 
     // Write header
-    streaming_data_header_t *header = (streaming_data_header_t *)buffer;
-    header->type                    = STREAMING_PACKET_TYPE_DATA;
-    header->parameter_group_hash    = pset->parameter_hash;
-    header->reserved                = 0;
-    header->timestamp               = timestamp;
+    streaming_data_packet_header_t *header = (streaming_data_packet_header_t *)buffer;
+    header->header.type                    = STREAMING_PACKET_TYPE_DATA;
+    header->header.identifier              = pset->parameter_hash;
+    header->timestamp                      = timestamp;
 
     // Sanity check that we wrote exactly the expected number of bytes
     assert((size_t)(payload_ptr - buffer) == required_total_size);
@@ -229,46 +241,55 @@ int streaming_packet_create_data(const parameter_set_t *pset,
  */
 streaming_packet_status_t streaming_packet_parse_data(const uint8_t *buffer, size_t buffer_size, parameter_set_t *pset)
 {
-    if (!buffer || !pset) {
+    if (!buffer || !pset)
+    {
         return PACKET_E_INVALID;
     }
-    if (!pset->parameters && pset->parameter_count > 0) {
+    if (!pset->parameters && pset->parameter_count > 0)
+    {
         return PACKET_E_INVALID; // Invalid target parameterset
     }
 
-    if (buffer_size < sizeof(streaming_data_header_t)) {
+    if (buffer_size < sizeof(streaming_data_packet_header_t))
+    {
         return PACKET_E_BADSIZE; // Buffer too small for header
     }
 
-    const streaming_data_header_t *header = (const streaming_data_header_t *)buffer;
-    if (header->type != STREAMING_PACKET_TYPE_DATA) {
+    const streaming_data_packet_header_t *header = (const streaming_data_packet_header_t *)buffer;
+    if (header->header.type != STREAMING_PACKET_TYPE_DATA)
+    {
         return PACKET_E_BADTYPE;
     }
 
     // Verify hash match. Consider recalculating pset hash if modification is possible.
     // parameter_set_recalculate_hash(pset); // Only if needed
-    if (header->parameter_group_hash != pset->parameter_hash) {
+    if (header->header.identifier != pset->parameter_hash)
+    {
         return PACKET_E_BADHASH;
     }
 
     // Calculate expected total size based on the target pset's definition
     size_t expected_payload_size = 0;
-    for (size_t i = 0; i < pset->parameter_count; i++) {
-        if (!pset->parameters[i].data) {
-             return PACKET_E_NODATA; // Target parameter data pointer is NULL
+    for (size_t i = 0; i < pset->parameter_count; i++)
+    {
+        if (!pset->parameters[i].data)
+        {
+            return PACKET_E_NODATA; // Target parameter data pointer is NULL
         }
         expected_payload_size += pset->parameters[i].size;
     }
-    size_t expected_total_size = sizeof(streaming_data_header_t) + expected_payload_size;
+    size_t expected_total_size = sizeof(streaming_data_packet_header_t) + expected_payload_size;
 
     // Check if the provided buffer size matches exactly what's expected
-    if (buffer_size != expected_total_size) {
-         return PACKET_E_BADSIZE; // Mismatch indicates corrupted packet or wrong pset definition
+    if (buffer_size != expected_total_size)
+    {
+        return PACKET_E_BADSIZE; // Mismatch indicates corrupted packet or wrong pset definition
     }
 
     // Copy data from buffer payload into the target parameter set's data pointers
-    const uint8_t *payload_ptr = buffer + sizeof(streaming_data_header_t);
-    for (size_t i = 0; i < pset->parameter_count; i++) {
+    const uint8_t *payload_ptr = buffer + sizeof(streaming_data_packet_header_t);
+    for (size_t i = 0; i < pset->parameter_count; i++)
+    {
         fixed_size_parameter_t *parameter = &pset->parameters[i];
         // Data pointer checked above
         assert(parameter->data != NULL);

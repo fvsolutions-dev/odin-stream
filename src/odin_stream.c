@@ -45,13 +45,13 @@ void decoding_manager_parse_packet(decoding_manager_t *manager, uint8_t *data, s
 {
 
     // check if length is large enough for header
-    if (length < sizeof(streaming_packet_head_t))
+    if (length < sizeof(streaming_packet_header_t))
     {
         return;
     }
 
     // Check packet id
-    streaming_packet_head_t *header = (streaming_packet_head_t *)data;
+    streaming_packet_header_t *header = (streaming_packet_header_t *)data;
 
     header_set_t *header_set = NULL;
     decoding_manager_find_identifier(manager, header->identifier, &header_set);

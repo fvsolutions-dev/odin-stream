@@ -250,7 +250,7 @@ public:
     nb::bytes generate_identifier_packet() const {
         check_initialized();
         // Estimate size needed (can be slightly larger if count changes, but safe)
-        size_t max_possible_size = sizeof(streaming_packet_header_t) +
+        size_t max_possible_size = sizeof(streaming_identifier_packet_header_t) +
                                    pset_ptr->parameter_count_max * sizeof(ident_payload_item_t);
         std::vector<uint8_t> buffer(max_possible_size);
 
@@ -276,7 +276,7 @@ public:
                  required_payload_size += pset_ptr->parameters[i].size;
              }
         }
-        size_t required_total_size = sizeof(streaming_data_header_t) + required_payload_size;
+        size_t required_total_size = sizeof(streaming_data_packet_header_t) + required_payload_size;
 
         std::vector<uint8_t> buffer(required_total_size);
 
@@ -339,12 +339,12 @@ public:
         // --- Perform Checks similar to C 'streaming_packet_parse_data' ---
 
         // Check minimum size for header
-        if (buffer_size < sizeof(streaming_data_header_t)) {
+        if (buffer_size < sizeof(streaming_data_packet_header_t)) {
              throw nb::value_error("Input data too small to contain data packet header.");
         }
 
         // Check header type
-        const streaming_data_header_t *header = (const streaming_data_header_t *)buffer_ptr;
+        const streaming_data_packet_header_t *header = (const streaming_data_packet_header_t *)buffer_ptr;
         if (header->type != STREAMING_PACKET_TYPE_DATA) {
             throw nb::value_error("Incorrect packet type");
         }
@@ -366,7 +366,7 @@ public:
         } else if (pset_ptr->parameter_count > 0) {
              throw std::logic_error("Internal error: ParameterSet count > 0 but parameters array is NULL.");
         }
-        size_t expected_total_size = sizeof(streaming_data_header_t) + expected_payload_size;
+        size_t expected_total_size = sizeof(streaming_data_packet_header_t) + expected_payload_size;
 
         if (buffer_size != expected_total_size) {
             throw nb::value_error("Packet size mismatch");
@@ -377,7 +377,7 @@ public:
         std::vector<nb::bytes> result_data;
         result_data.reserve(pset_ptr->parameter_count);
 
-        const uint8_t *payload_ptr = buffer_ptr + sizeof(streaming_data_header_t);
+        const uint8_t *payload_ptr = buffer_ptr + sizeof(streaming_data_packet_header_t);
         const uint8_t *buffer_end = buffer_ptr + buffer_size; // For bounds checking
 
         if (pset_ptr->parameters) {
