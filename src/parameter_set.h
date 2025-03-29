@@ -44,7 +44,25 @@ typedef struct parameter_set
 
 // --- Function Declarations ---
 
+/**
+ * @brief Macro to define a static parameter set with a fixed maximum size.
+ *
+ * This macro creates a static parameter set with a fixed size, avoiding
+ * dynamic memory allocation. The parameter set is initialized at compile time.
+ *
+ * @param NAME The name of the static parameter set variable.
+ * @param MAX_PARAMETERS The maximum number of parameters the set can hold.
+ */
+#define DEFINE_STATIC_PARAMETER_SET(NAME, MAX_PARAMETERS)         \
+    static fixed_size_parameter_t NAME##_parameters[MAX_PARAMETERS]; \
+    static parameter_set_t NAME = {                               \
+        .parameters = NAME##_parameters,                          \
+        .parameter_count = 0,                                     \
+        .parameter_count_max = MAX_PARAMETERS,                    \
+        .parameter_hash = 0                                       \
+    }
 
+    
 parameter_set_t *parameter_set_create(size_t max_parameters);
 void parameter_set_destroy(parameter_set_t *pset);
 parameter_set_status_t parameter_set_add(parameter_set_t *pset, fixed_size_parameter_t parameter);

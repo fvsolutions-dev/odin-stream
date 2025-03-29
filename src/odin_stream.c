@@ -79,7 +79,6 @@ void decoding_manager_parse_packet(decoding_manager_t *manager, uint8_t *data, s
             .parameter_set = streaming_packet_parse_identifier(data, length),
         };
 
-
         if (parsed_header.parameter_set == NULL)
         {
             // Failed to parse identifier packet, ignore it
@@ -95,6 +94,8 @@ void decoding_manager_parse_packet(decoding_manager_t *manager, uint8_t *data, s
             if (param == NULL)
             {
                 printf("Parameter %d not found in group\n", id);
+                parameter_set_destroy(parsed_header.parameter_set);
+
                 return;
             }
 
@@ -102,6 +103,7 @@ void decoding_manager_parse_packet(decoding_manager_t *manager, uint8_t *data, s
             if (parsed_header.parameter_set->parameters[i].size != ODIN_get_max_data_size(param))
             {
                 printf("Parameter %d size mismatch\n", id);
+                parameter_set_destroy(parsed_header.parameter_set);
                 return;
             }
 
@@ -109,10 +111,9 @@ void decoding_manager_parse_packet(decoding_manager_t *manager, uint8_t *data, s
             parsed_header.parameter_set->parameters[i].data = param->data;
         }
 
-        // add
+        // Add the new header set to the manager
         manager->data[manager->count] = parsed_header;
         manager->count++;
-        
         break;
 
     case STREAMING_PACKET_TYPE_DATA:
@@ -131,7 +132,6 @@ void decoding_manager_parse_packet(decoding_manager_t *manager, uint8_t *data, s
         }
 
         break;
-
     }
     default:
         return;
