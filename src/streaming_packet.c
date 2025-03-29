@@ -19,7 +19,8 @@
  * @return PACKET_E_OVERFLOW if any parameter's size exceeds UINT16_MAX.
  * @return PACKET_E_INTERNAL if pset state is inconsistent (e.g., null parameters array).
  */
-int streaming_packet_create_identifier(const parameter_set_t *pset, uint8_t *buffer, size_t buffer_size)
+int streaming_packet_create_identifier(
+    parameter_set_t *pset, uint8_t *buffer, size_t buffer_size, uint32_t timestamp, uint32_t header_transmission_interval)
 {
     if (!pset || !buffer)
     {
@@ -29,6 +30,13 @@ int streaming_packet_create_identifier(const parameter_set_t *pset, uint8_t *buf
     {
         return PACKET_E_INTERNAL; // Inconsistent state
     }
+
+    // Check if it's time to send the header again
+    if (timestamp - pset->last_header_transmission_timestamp < header_transmission_interval)
+    {
+        return 0;
+    }
+    pset->last_header_transmission_timestamp = timestamp;
 
     // Calculate required size *before* writing anything
     size_t required_payload_size = pset->parameter_count * sizeof(ident_payload_item_t);
@@ -301,42 +309,4 @@ streaming_packet_status_t streaming_packet_parse_data(const uint8_t *buffer, siz
     assert((size_t)(payload_ptr - buffer) == expected_total_size);
 
     return PACKET_SUCCESS;
-}
-
-int streaming_packet_create(parameter_set_t *pset,
-                            uint8_t               *buffer,
-                            size_t                 buffer_size,
-                            uint32_t               timestamp,
-                            uint32_t               header_transmission_interval)
-{
-    if (!pset || !buffer)
-    {
-        return PACKET_E_INVALID;
-    }
-    if (!pset->parameters && pset->parameter_count > 0)
-    {
-        return PACKET_E_INTERNAL; // Inconsistent state
-    }
-    int write_size = 0;
-    // Check if it's time to send the header again
-    if (timestamp - pset->last_header_transmission_timestamp >= header_transmission_interval)
-    {
-        pset->last_header_transmission_timestamp = timestamp;
-        write_size = streaming_packet_create_identifier(pset, buffer, buffer_size);
-
-        if (write_size < 0)
-        {
-            return write_size; // Error in creating identifier packet
-        }
-    }
-
-    // Create data packet
-    int data_size = streaming_packet_create_data(pset, buffer + write_size, buffer_size - write_size, timestamp);
-    if (data_size < 0)
-    {
-        return data_size; // Error in creating data packet
-    }
-
-    // Return total size of the created packet
-    return write_size + data_size;
 }

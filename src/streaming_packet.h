@@ -68,7 +68,8 @@ typedef struct
  * @brief Generates an identifier packet into the provided buffer.
  * @see streaming_packet_create_identifier in streaming_packet.c for details.
  */
-int streaming_packet_create_identifier(const parameter_set_t *pset, uint8_t *buffer, size_t buffer_size);
+int streaming_packet_create_identifier(
+    parameter_set_t *pset, uint8_t *buffer, size_t buffer_size, uint32_t timestamp, uint32_t header_transmission_interval);
 
 /**
  * @brief Parses an identifier packet and creates a new parameter set.
@@ -88,9 +89,4 @@ int streaming_packet_create_data(const parameter_set_t *pset, uint8_t *buffer, s
  */
 streaming_packet_status_t streaming_packet_parse_data(const uint8_t *buffer, size_t buffer_size, parameter_set_t *pset);
 
-int streaming_packet_create(parameter_set_t *pset,
-                            uint8_t               *buffer,
-                            size_t                 buffer_size,
-                            uint32_t               timestamp,
-                            uint32_t               header_transmission_interval);
 #endif // STREAMING_PACKET_H
