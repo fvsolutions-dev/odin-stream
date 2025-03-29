@@ -88,4 +88,9 @@ int streaming_packet_create_data(const parameter_set_t *pset, uint8_t *buffer, s
  */
 streaming_packet_status_t streaming_packet_parse_data(const uint8_t *buffer, size_t buffer_size, parameter_set_t *pset);
 
+int streaming_packet_create(parameter_set_t *pset,
+                            uint8_t               *buffer,
+                            size_t                 buffer_size,
+                            uint32_t               timestamp,
+                            uint32_t               header_transmission_interval);
 #endif // STREAMING_PACKET_H
