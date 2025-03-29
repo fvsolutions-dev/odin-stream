@@ -2,20 +2,21 @@
 #define STREAMING_PACKET_H
 
 #include <stdint.h>
-#include <stddef.h> // For size_t
+#include <stddef.h>        // For size_t
 #include "parameter_set.h" // Needs definition of parameter_set_t
 
 /** @brief Error codes for streaming_packet functions */
-typedef enum {
-    PACKET_SUCCESS      =  0, ///< Operation successful
-    PACKET_E_INVALID    = -1, ///< Invalid argument (e.g., NULL pointer)
-    PACKET_E_BADSIZE    = -2, ///< Input/output buffer too small or invalid size reported
-    PACKET_E_BADTYPE    = -3, ///< Incorrect packet type found during parsing
-    PACKET_E_BADHASH    = -4, ///< Parameter group hash mismatch during parsing
-    PACKET_E_NODATA     = -5, ///< Required parameter data pointer is NULL
-    PACKET_E_OVERFLOW   = -6, ///< Data size exceeds packet format limits (e.g., uint16_t)
-    PACKET_E_INTERNAL   = -7, ///< Internal inconsistency or logic error
-    PACKET_E_NOMEM      = -8  ///< Memory allocation failed (relevant for parsing funcs)
+typedef enum
+{
+    PACKET_SUCCESS = 0,     ///< Operation successful
+    PACKET_E_INVALID = -1,  ///< Invalid argument (e.g., NULL pointer)
+    PACKET_E_BADSIZE = -2,  ///< Input/output buffer too small or invalid size reported
+    PACKET_E_BADTYPE = -3,  ///< Incorrect packet type found during parsing
+    PACKET_E_BADHASH = -4,  ///< Parameter group hash mismatch during parsing
+    PACKET_E_NODATA = -5,   ///< Required parameter data pointer is NULL
+    PACKET_E_OVERFLOW = -6, ///< Data size exceeds packet format limits (e.g., uint16_t)
+    PACKET_E_INTERNAL = -7, ///< Internal inconsistency or logic error
+    PACKET_E_NOMEM = -8     ///< Memory allocation failed (relevant for parsing funcs)
 } streaming_packet_status_t;
 
 /**
@@ -24,7 +25,7 @@ typedef enum {
 typedef enum
 {
     STREAMING_PACKET_TYPE_IDENTIFIER = 0x01, ///< Packet contains parameter identifiers and sizes.
-    STREAMING_PACKET_TYPE_DATA       = 0x02, ///< Packet contains parameter data.
+    STREAMING_PACKET_TYPE_DATA = 0x02,       ///< Packet contains parameter data.
 } streaming_packet_type_t;
 
 // Packing ensures structs match byte layout in packets exactly.
@@ -33,19 +34,26 @@ typedef enum
 /** @brief Header for an identifier packet. */
 typedef struct
 {
-    uint8_t  type;                   ///< Must be STREAMING_PACKET_TYPE_IDENTIFIER.
-    uint16_t parameter_group_hash;   ///< Hash of the parameter set indices included.
-    uint8_t  reserved;               ///< Reserved for future use, should be 0.
-    uint32_t odin_definition_hash;   ///< Hash identifying the overall parameter definitions.
+    streaming_packet_type_t type : 8; // Identifies the packet type.
+    uint16_t identifier;              // Hash of the parameter set indices included.
+} streaming_packet_head_t;
+
+/** @brief Header for an identifier packet. */
+typedef struct
+{
+    uint8_t type;                  ///< Must be STREAMING_PACKET_TYPE_IDENTIFIER.
+    uint16_t parameter_group_hash; ///< Hash of the parameter set indices included.
+    uint8_t reserved;              ///< Reserved for future use, should be 0.
+    uint32_t odin_definition_hash; ///< Hash identifying the overall parameter definitions.
 } streaming_packet_header_t;
 
 /** @brief Header for a data packet. */
 typedef struct
 {
-    uint8_t  type;                   ///< Must be STREAMING_PACKET_TYPE_DATA.
-    uint16_t parameter_group_hash;   ///< Hash of the parameter set indices included.
-    uint8_t  reserved;               ///< Reserved for future use, should be 0.
-    uint32_t timestamp;              ///< Timestamp for the data sample.
+    uint8_t type;                  ///< Must be STREAMING_PACKET_TYPE_DATA.
+    uint16_t parameter_group_hash; ///< Hash of the parameter set indices included.
+    uint8_t reserved;              ///< Reserved for future use, should be 0.
+    uint32_t timestamp;            ///< Timestamp for the data sample.
 } streaming_data_header_t;
 
 /** @brief Describes a single parameter within an identifier packet's payload. */
@@ -56,7 +64,6 @@ typedef struct
 } ident_payload_item_t;
 
 #pragma pack(pop)
-
 
 // --- Function Declarations ---
 
@@ -86,6 +93,5 @@ int streaming_packet_create_data(const parameter_set_t *pset,
  * @see streaming_packet_parse_data in streaming_packet.c for details.
  */
 streaming_packet_status_t streaming_packet_parse_data(const uint8_t *buffer, size_t buffer_size, parameter_set_t *pset);
-
 
 #endif // STREAMING_PACKET_H

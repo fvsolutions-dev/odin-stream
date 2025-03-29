@@ -1,8 +1,19 @@
 cmake_minimum_required(VERSION 3.15...3.26)
 
+# If ESP-IDF is reading this CMakeLists.txt, skip it
+if(DEFINED ENV{IDF_PATH})
+  idf_component_register(SRCS "src/streaming_packet.c"
+    "src/parameter_set.c"
+    "src/odin_stream.c"
+    INCLUDE_DIRS "src"
+    REQUIRES "odin")
+
+  return()
+endif()
+
 project(i_think_this_name_does_not_matter LANGUAGES C CXX)
 
-if (NOT SKBUILD)
+if(NOT SKBUILD)
   message(WARNING "\
   This CMake file is meant to be executed using 'scikit-build'. Running
   it directly will almost certainly not produce the desired result. If
@@ -30,21 +41,21 @@ find_package(Python 3.8
   REQUIRED COMPONENTS Interpreter Development.Module
   OPTIONAL_COMPONENTS Development.SABIModule)
 
- if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
 option(COVERAGE "Enable coverage reporting" ON)
 if(COVERAGE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -fprofile-arcs -ftest-coverage")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g -fprofile-arcs -ftest-coverage")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -fprofile-arcs -ftest-coverage")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g -fprofile-arcs -ftest-coverage")
 endif()
 
 execute_process(
-    COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
-    OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NB_DIR)
-    list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
+  COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+  OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NB_DIR)
+list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
 
 # Import nanobind through CMake's find_package mechanism
 find_package(nanobind CONFIG REQUIRED)
@@ -78,13 +89,13 @@ nanobind_add_module(
 )
 
 nanobind_add_stub(
-  
-    odin_stream_stub
-    INSTALL_TIME
-    MODULE odin_stream
-    OUTPUT odin_stream.pyi
-    PYTHON_PATH $<TARGET_FILE_DIR:odin_stream>
-    DEPENDS odin_stream
+
+  odin_stream_stub
+  INSTALL_TIME
+  MODULE odin_stream
+  OUTPUT odin_stream.pyi
+  PYTHON_PATH $<TARGET_FILE_DIR:odin_stream>
+  DEPENDS odin_stream
 )
 
 target_include_directories(odin_stream PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
