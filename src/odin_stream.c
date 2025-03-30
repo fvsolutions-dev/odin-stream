@@ -45,6 +45,8 @@ void stream_decoding_manager_parse_packet(decoding_manager_t           *manager,
     // check if length is large enough for header
     if (length < sizeof(stream_packet_header_t))
     {
+        // Not enough data for header, ignore packet
+        manager->statistics.other_errors++;
         return;
     }
 
@@ -53,13 +55,16 @@ void stream_decoding_manager_parse_packet(decoding_manager_t           *manager,
 
     if (header->type == STREAM_STREAM_PACKET_TYPE_EVENT)
     {
+
         stream_event_t event = { 0 };
         if (stream_packet_parse_event(data, length, &event) != STREAM_PACKET_SUCCESS)
         {
             // Failed to parse event packet, ignore it
+            manager->statistics.event_decoding_errors++;
             return;
         }
 
+        manager->statistics.received_events_packets++;
         // Call the event callback if set
         if (manager->event_callback != NULL)
         {
@@ -78,6 +83,7 @@ void stream_decoding_manager_parse_packet(decoding_manager_t           *manager,
             // Identifier already known, we can ignore packet
             if (header_set != NULL)
             {
+                manager->statistics.received_identifier_packets++;
                 return;
             }
 
@@ -85,13 +91,16 @@ void stream_decoding_manager_parse_packet(decoding_manager_t           *manager,
             if (manager->count >= manager->max_count)
             {
                 // No space for new packet id, ignore packet
+                manager->statistics.identifier_decoding_errors++;
                 return;
             }
             stream_parameter_set_t *parameter_set = stream_packet_parse_identifier(data, length);
 
             if (parameter_set == NULL)
             {
+
                 // Failed to parse identifier packet, ignore it
+                manager->statistics.identifier_decoding_errors++;
                 return;
             }
 
@@ -103,6 +112,7 @@ void stream_decoding_manager_parse_packet(decoding_manager_t           *manager,
                 if (param == NULL)
                 {
                     stream_parameter_set_destroy(parameter_set);
+                    manager->statistics.identifier_decoding_errors++;
                     return;
                 }
 
@@ -110,6 +120,7 @@ void stream_decoding_manager_parse_packet(decoding_manager_t           *manager,
                 if (parameter_set->parameters[i].size != ODIN_get_max_data_size(param))
                 {
                     stream_parameter_set_destroy(parameter_set);
+                    manager->statistics.identifier_decoding_errors++;
                     return;
                 }
 
@@ -123,26 +134,33 @@ void stream_decoding_manager_parse_packet(decoding_manager_t           *manager,
                 .parameter_set     = parameter_set,
             };
             manager->count++;
+            manager->statistics.received_identifier_packets++;
+            manager->statistics.identifier_count++;
             break;
 
         case STREAM_STREAM_PACKET_TYPE_DATA: {
             if (header_set == NULL)
             {
                 // No matching identifier packet, ignore data packet
+                manager->statistics.received_unresolved_packets++;
                 return;
             }
 
             stream_packet_status_t status = stream_packet_parse_data(data, length, header_set->parameter_set);
             if (status != STREAM_PACKET_SUCCESS)
             {
+                manager->statistics.data_decoding_errors++;
                 // Failed to parse data packet, ignore it
                 return;
             }
-
+            
+            manager->statistics.received_data_packets++;
             break;
         }
 
         default:
+            // Unknown packet type, ignore it
+            manager->statistics.other_errors++;
             return;
     }
 }
