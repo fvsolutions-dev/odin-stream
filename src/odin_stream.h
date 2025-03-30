@@ -25,7 +25,7 @@ typedef struct
     uint32_t received_events_packets; // Total valid events received
     uint32_t received_identifier_packets; // Total valid identifiers received
     uint32_t received_data_packets;// Totaldata packets received
-    uint32_t received_unresolved_packets; // Total unresolved packets received
+    uint32_t received_unresolved_data_packets; // Total unresolved packets received
 
     uint32_t identifier_count; // Numver of data formats in the manager
 } decoding_manager_statistics_t;

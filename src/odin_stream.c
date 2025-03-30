@@ -142,7 +142,7 @@ void stream_decoding_manager_parse_packet(decoding_manager_t           *manager,
             if (header_set == NULL)
             {
                 // No matching identifier packet, ignore data packet
-                manager->statistics.received_unresolved_packets++;
+                manager->statistics.received_unresolved_data_packets++;
                 return;
             }
 
