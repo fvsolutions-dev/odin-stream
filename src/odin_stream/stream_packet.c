@@ -1,4 +1,4 @@
-#include "streaming_packet.h"
+#include "odin_stream/stream_packet.h"
 #include <stdlib.h>
 #include <string.h> // For memcpy
 #include <assert.h> // For internal checks

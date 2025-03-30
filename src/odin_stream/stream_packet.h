@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>        // For size_t
-#include "parameter_set.h" // Needs definition of parameter_set_t
+#include "odin_stream/stream_parameter_set.h"
 
 /** @brief Error codes for streaming_packet functions */
 typedef enum

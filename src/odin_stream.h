@@ -1,5 +1,5 @@
-#include "parameter_set.h"
-#include "streaming_packet.h"
+#include "odin_stream/stream_packet.h"
+#include "odin_stream/stream_parameter_set.h"
 #include "odin_core.h"
 
 typedef struct

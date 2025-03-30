@@ -1,28 +1,12 @@
-#include "parameter_set.h"
+#include "odin_stream/stream_parameter_set.h"
 
 #include <stdlib.h> // For malloc, free
 #include <string.h> // For memset, memmove
 #include <assert.h> // For internal checks
 
 
-/**
- * @internal
- * @brief Internal helper to update the parameter hash (CRC16 of indices).
- * Assumes pset is not NULL and pset->parameters is valid if count > 0.
- * @param pset Non-NULL pointer to the parameter set.
- * @return PARAM_SET_SUCCESS (currently always succeeds if preconditions met).
- */
-static parameter_set_status_t parameter_set_update_hash(parameter_set_t *pset);
 
-/**
- * @internal
- * @brief Calculates CRC-16 CCITT-FALSE.
- * Polynomial: 0x1021, Initial Value: 0xFFFF, No XOR Out, No Reflect In/Out.
- * @param crc Starting CRC value.
- * @param data Pointer to data buffer. Can be NULL if length is 0.
- * @param length Number of bytes in data buffer.
- * @return Calculated CRC16 value.
- */
+static parameter_set_status_t parameter_set_update_hash(parameter_set_t *pset);
 static uint16_t crc16(uint16_t crc, const uint8_t *data, size_t length);
 
 
