@@ -35,7 +35,7 @@ In addition to the common header, the header contains the following content:
 
 There remaining data in the packet contains the data in a specific order, which is defined in the identifier packet.
 
-### Event packet `type=0xB0`
+### Event packet `type=0x0B`
 This packet contains custom event data which can be streamed out. Details of the events need to br predefined on both sides of the stream.
 
 

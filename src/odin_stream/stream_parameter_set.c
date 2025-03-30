@@ -1,14 +1,12 @@
 #include "odin_stream/stream_parameter_set.h"
 
-#include <stdlib.h> // For malloc, free
-#include <string.h> // For memset, memmove
-#include <assert.h> // For internal checks
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
 
+static stream_parameter_set_status_t stream_parameter_set_update_contents(stream_parameter_set_t *parameter_set);
 
-
-static parameter_set_status_t parameter_set_update_hash(parameter_set_t *pset);
 static uint16_t crc16(uint16_t crc, const uint8_t *data, size_t length);
-
 
 /**
  * @brief Creates and allocates a new parameter set.
@@ -21,33 +19,35 @@ static uint16_t crc16(uint16_t crc, const uint8_t *data, size_t length);
  * allocation fails or max_parameters is 0.
  * @note The returned pointer must be freed using parameter_set_destroy().
  */
-parameter_set_t *parameter_set_create(size_t max_parameters)
+stream_parameter_set_t *stream_parameter_set_create(size_t max_parameters)
 {
-    if (max_parameters == 0) {
+    if (max_parameters == 0)
+    {
         return NULL; // Cannot create a set with zero capacity
     }
 
-    parameter_set_t *pset = malloc(sizeof(parameter_set_t));
-    if (!pset) {
+    stream_parameter_set_t *parameter_set = malloc(sizeof(stream_parameter_set_t));
+    if (!parameter_set)
+    {
         return NULL; // Allocation failed
     }
 
-    pset->parameters = NULL;
-    pset->parameter_count = 0;
-    pset->parameter_count_max = max_parameters;
-    pset->parameter_hash = 0; // Will be updated below
+    // Memset to zero
+    memset(parameter_set, 0, sizeof(stream_parameter_set_t));
 
-    pset->parameters = malloc(max_parameters * sizeof(fixed_size_parameter_t));
-    if (!pset->parameters) {
-        free(pset); // Clean up partially allocated struct
-        return NULL; // Allocation failed
+    // Initialize the data
+    parameter_set->parameter_count_max = max_parameters;
+
+    // Allocate the internal array of parameters
+    parameter_set->parameters = malloc(max_parameters * sizeof(stream_fixed_size_parameter_t));
+    if (!parameter_set->parameters)
+    {
+        free(parameter_set); // Clean up partially allocated struct
+        return NULL;         // Allocation failed
     }
 
-    // Optional: Initialize parameter memory
-    // memset(pset->parameters, 0, max_parameters * sizeof(fixed_size_parameter_t));
-
-    parameter_set_update_hash(pset); // Initialize hash
-    return pset;
+    stream_parameter_set_update_contents(parameter_set); // Initialize hash
+    return parameter_set;
 }
 
 /**
@@ -57,20 +57,22 @@ parameter_set_t *parameter_set_create(size_t max_parameters)
  * Does *not* free the data pointed to by individual parameter 'data' pointers,
  * as their lifetime is managed externally. Safe to call with NULL.
  *
- * @param pset Pointer to the parameter set to free. Can be NULL.
+ * @param parameter_set Pointer to the parameter set to free. Can be NULL.
  */
-void parameter_set_destroy(parameter_set_t *pset)
+void stream_parameter_set_destroy(stream_parameter_set_t *parameter_set)
 {
-    if (!pset) {
+    if (!parameter_set)
+    {
         return; // Nothing to free
     }
     // Free the internal array first (if allocated)
-    if (pset->parameters) {
-        free(pset->parameters);
-        pset->parameters = NULL; // Avoid dangling pointer
+    if (parameter_set->parameters)
+    {
+        free(parameter_set->parameters);
+        parameter_set->parameters = NULL; // Avoid dangling pointer
     }
     // Free the struct itself
-    free(pset);
+    free(parameter_set);
 }
 
 /**
@@ -80,34 +82,39 @@ void parameter_set_destroy(parameter_set_t *pset)
  * into the set's internal array if there is space and the index doesn't already exist.
  * Updates the set's hash after adding.
  *
- * @param pset Pointer to the parameter set. Must not be NULL.
+ * @param parameter_set Pointer to the parameter set. Must not be NULL.
  * @param parameter The parameter descriptor to add (copied by value).
  * @return parameter_set_status_t indicating success or failure reason.
  */
-parameter_set_status_t parameter_set_add(parameter_set_t *pset, fixed_size_parameter_t parameter)
+stream_parameter_set_status_t stream_parameter_set_add(stream_parameter_set_t       *parameter_set,
+                                                       stream_fixed_size_parameter_t parameter)
 {
-    if (!pset || !pset->parameters) {
-        return PARAM_SET_E_INVALID; // Or assert(pset && pset->parameters)
+    if (!parameter_set || !parameter_set->parameters)
+    {
+        return STREAM_PARAM_SET_ERROR_INVALID; // Or assert(parameter_set && parameter_set->parameters)
     }
 
-    if (pset->parameter_count >= pset->parameter_count_max) {
-        return PARAM_SET_E_FULL;
+    if (parameter_set->parameter_count >= parameter_set->parameter_count_max)
+    {
+        return STREAM_PARAM_SET_ERROR_FULL;
     }
 
-    // Check for duplicate index
-    for (size_t i = 0; i < pset->parameter_count; i++) {
-        if (pset->parameters[i].index == parameter.index) {
-            return PARAM_SET_E_DUPLICATE;
+    // Check for duplicate indexes
+    for (size_t i = 0; i < parameter_set->parameter_count; i++)
+    {
+        if (parameter_set->parameters[i].index == parameter.index)
+        {
+            return STREAM_PARAM_SET_ERROR_DUPLICATE;
         }
     }
 
     // Add the parameter (struct copy)
-    pset->parameters[pset->parameter_count] = parameter;
-    pset->parameter_count++; // Increment count *after* successful add
+    parameter_set->parameters[parameter_set->parameter_count] = parameter;
+    parameter_set->parameter_count++; // Increment count *after* successful add
 
-    parameter_set_update_hash(pset);
+    stream_parameter_set_update_contents(parameter_set);
 
-    return PARAM_SET_SUCCESS;
+    return STREAM_PARAM_SET_SUCCESS;
 }
 
 /**
@@ -116,35 +123,40 @@ parameter_set_status_t parameter_set_add(parameter_set_t *pset, fixed_size_param
  * Finds the parameter with the matching index and removes it by shifting
  * subsequent elements down in the internal array. Updates the set's hash.
  *
- * @param pset Pointer to the parameter set. Must not be NULL.
+ * @param parameter_set Pointer to the parameter set. Must not be NULL.
  * @param parameter_index The index of the parameter to remove.
  * @return parameter_set_status_t indicating success or failure reason.
  */
-parameter_set_status_t parameter_set_remove_by_index(parameter_set_t *pset, uint32_t parameter_index)
+stream_parameter_set_status_t stream_parameter_set_remove_by_index(stream_parameter_set_t *parameter_set,
+                                                                   uint32_t                parameter_index)
 {
-     if (!pset || !pset->parameters) {
-        return PARAM_SET_E_INVALID; // Or assert(pset && pset->parameters)
+    if (!parameter_set || !parameter_set->parameters)
+    {
+        return STREAM_PARAM_SET_ERROR_INVALID; // Or assert(parameter_set && parameter_set->parameters)
     }
 
-    for (size_t i = 0; i < pset->parameter_count; i++) {
-        if (pset->parameters[i].index == parameter_index) {
+    for (size_t i = 0; i < parameter_set->parameter_count; i++)
+    {
+        if (parameter_set->parameters[i].index == parameter_index)
+        {
             // Found it. Calculate number of elements to move.
-            size_t elements_to_move = pset->parameter_count - 1 - i;
-            if (elements_to_move > 0) {
+            size_t elements_to_move = parameter_set->parameter_count - 1 - i;
+            if (elements_to_move > 0)
+            {
                 // Shift remaining elements down using memmove for safety
-                memmove(&pset->parameters[i],          // Destination
-                        &pset->parameters[i + 1],      // Source
-                        elements_to_move * sizeof(fixed_size_parameter_t));
+                memmove(&parameter_set->parameters[i],     // Destination
+                        &parameter_set->parameters[i + 1], // Source
+                        elements_to_move * sizeof(stream_fixed_size_parameter_t));
             }
 
             // Decrement count and update hash
-            pset->parameter_count--;
-            parameter_set_update_hash(pset);
-            return PARAM_SET_SUCCESS;
+            parameter_set->parameter_count--;
+            stream_parameter_set_update_contents(parameter_set);
+            return STREAM_PARAM_SET_SUCCESS;
         }
     }
 
-    return PARAM_SET_E_NOTFOUND; // Parameter index not found
+    return STREAM_PARAM_SET_ERROR_NOTFOUND; // Parameter index not found
 }
 
 /**
@@ -154,32 +166,34 @@ parameter_set_status_t parameter_set_remove_by_index(parameter_set_t *pset, uint
  * Does not change the maximum capacity or free allocated memory
  * (use parameter_set_destroy for that).
  *
- * @param pset Pointer to the parameter set. Must not be NULL.
+ * @param parameter_set Pointer to the parameter set. Must not be NULL.
  * @return parameter_set_status_t indicating success or failure reason.
  */
-parameter_set_status_t parameter_set_clear(parameter_set_t *pset)
+stream_parameter_set_status_t parameter_set_clear(stream_parameter_set_t *parameter_set)
 {
-     if (!pset) {
-        return PARAM_SET_E_INVALID; // Or assert(pset)
+    if (!parameter_set)
+    {
+        return STREAM_PARAM_SET_ERROR_INVALID; // Or assert(parameter_set)
     }
 
-    pset->parameter_count = 0;
-    parameter_set_update_hash(pset); // Recalculate hash for empty set
-    return PARAM_SET_SUCCESS;
+    parameter_set->parameter_count = 0;
+    stream_parameter_set_update_contents(parameter_set); // Recalculate hash for empty set
+    return STREAM_PARAM_SET_SUCCESS;
 }
-
 
 /**
  * @brief Recalculates and updates the parameter_hash field.
  * Intended for internal use but exposed if needed externally.
- * @param pset Pointer to the parameter set. Must not be NULL.
+ * @param parameter_set Pointer to the parameter set. Must not be NULL.
  * @return parameter_set_status_t indicating success or failure reason.
  */
-parameter_set_status_t parameter_set_recalculate_hash(parameter_set_t *pset) {
-     if (!pset) {
-        return PARAM_SET_E_INVALID; // Or assert(pset)
+stream_parameter_set_status_t parameter_set_recalculate_hash(stream_parameter_set_t *parameter_set)
+{
+    if (!parameter_set)
+    {
+        return STREAM_PARAM_SET_ERROR_INVALID; // Or assert(parameter_set)
     }
-    return parameter_set_update_hash(pset);
+    return stream_parameter_set_update_contents(parameter_set);
 }
 
 /**
@@ -193,15 +207,18 @@ parameter_set_status_t parameter_set_recalculate_hash(parameter_set_t *pset) {
  */
 static uint16_t crc16(uint16_t crc, const uint8_t *data, size_t length)
 {
-    if (!data && length > 0) {
-         // Programming error: should not happen if called correctly
-         assert(0 && "NULL data pointer passed to crc16 with non-zero length");
-         return crc; // Or some other error indication if asserts disabled
+    if (!data && length > 0)
+    {
+        // Programming error: should not happen if called correctly
+        assert(0 && "NULL data pointer passed to crc16 with non-zero length");
+        return crc; // Or some other error indication if asserts disabled
     }
 
-    for (size_t i = 0; i < length; i++) {
+    for (size_t i = 0; i < length; i++)
+    {
         crc ^= ((uint16_t)data[i]) << 8;
-        for (int j = 0; j < 8; j++) {
+        for (int j = 0; j < 8; j++)
+        {
             if (crc & 0x8000)
                 crc = (crc << 1) ^ 0x1021; // Polynomial 0x1021
             else
@@ -213,28 +230,42 @@ static uint16_t crc16(uint16_t crc, const uint8_t *data, size_t length)
 
 /**
  * @internal
- * @brief Internal helper to update the parameter hash (CRC16 of indices).
- * Assumes pset is not NULL and pset->parameters is valid if count > 0.
- * @param pset Non-NULL pointer to the parameter set.
- * @return PARAM_SET_SUCCESS (currently always succeeds if preconditions met).
+ * @brief Internal helper to update the parameter hash (CRC16 of indices) and payload size.
+ * Assumes parameter_set is not NULL and parameter_set->parameters is valid if count > 0.
+ * @param parameter_set Non-NULL pointer to the parameter set.
+ * @return STREAM_PARAM_SET_SUCCESS (currently always succeeds if preconditions met).
  */
 
-static parameter_set_status_t parameter_set_update_hash(parameter_set_t *pset)
+static stream_parameter_set_status_t stream_parameter_set_update_contents(stream_parameter_set_t *parameter_set)
 {
-    assert(pset != NULL && "NULL pset passed to parameter_set_update_hash");
+    assert(parameter_set != NULL && "NULL parameter_set passed to parameter_set_update_hash");
 
     uint16_t crc = 0xFFFF; // Initial value for CRC-16 CCITT-FALSE
-    // Calculate CRC only if parameters array exists (it should if pset is valid)
-    if (pset->parameters) {
-        for (size_t i = 0; i < pset->parameter_count; i++) {
+    // Calculate CRC only if parameters array exists (it should if parameter_set is valid)
+    if (parameter_set->parameters)
+    {
+        for (size_t i = 0; i < parameter_set->parameter_count; i++)
+        {
             // Calculate CRC based on index
-            uint32_t index = pset->parameters[i].index;
-            crc = crc16(crc, (const uint8_t *)&index, sizeof(index));
+            uint32_t index = parameter_set->parameters[i].index;
+            crc            = crc16(crc, (const uint8_t *)&index, sizeof(index));
         }
-    } else {
-        // This indicates an inconsistent state if parameter_count > 0
-         assert(pset->parameter_count == 0 && "Parameter array is NULL but count > 0");
     }
-    pset->parameter_hash = crc;
-    return PARAM_SET_SUCCESS;
+    else
+    {
+        // This indicates an inconsistent state if parameter_count > 0
+        assert(parameter_set->parameter_count == 0 && "Parameter array is NULL but count > 0");
+    }
+    parameter_set->parameter_set_identifier = crc;
+
+    // Calculate required payload size
+    size_t required_payload_size = 0;
+    for (size_t i = 0; i < parameter_set->parameter_count; i++)
+    {
+        required_payload_size += parameter_set->parameters[i].size;
+    }
+    // Set payload size in the parameter set
+    parameter_set->payload_size = (uint16_t)required_payload_size;
+
+    return STREAM_PARAM_SET_SUCCESS;
 }

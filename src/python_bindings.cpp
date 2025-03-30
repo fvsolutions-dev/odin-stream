@@ -24,19 +24,19 @@ using namespace nb::literals;
 inline void check_param_set_status(parameter_set_status_t status, const std::string& context = "") {
     std::string prefix = context.empty() ? "" : context + ": ";
     switch (status) {
-        case PARAM_SET_SUCCESS:
+        case STREAM_PARAM_SET_SUCCESS:
             return; // No error
-        case PARAM_SET_E_NOMEM:
+        case STREAM_PARAM_SET_ERROR_NOMEM:
             throw std::bad_alloc(); // Map to standard C++ exception
-        case PARAM_SET_E_FULL:
+        case STREAM_PARAM_SET_ERROR_FULL:
             throw nb::index_error((prefix + "Parameter set is full.").c_str());
-        case PARAM_SET_E_DUPLICATE:
+        case STREAM_PARAM_SET_ERROR_DUPLICATE:
             throw nb::value_error((prefix + "Parameter index already exists.").c_str());
-        case PARAM_SET_E_NOTFOUND:
+        case STREAM_PARAM_SET_ERROR_NOTFOUND:
             throw nb::key_error((prefix + "Parameter index not found.").c_str()); // Map to key error
-        case PARAM_SET_E_INVALID:
+        case STREAM_PARAM_SET_ERROR_INVALID:
             throw nb::value_error((prefix + "Invalid argument (e.g., NULL pointer internally, or bad state).").c_str());
-        case PARAM_SET_E_INTERNAL:
+        case STREAM_PARAM_SET_ERROR_INTERNAL:
             throw std::runtime_error((prefix + "Internal parameter set inconsistency detected.").c_str());
         default:
             throw std::runtime_error((prefix + "Unknown parameter set error code: " + std::to_string(status)).c_str());
@@ -51,23 +51,23 @@ inline void check_packet_status(int status, const std::string& context = "") {
      }
      // Handle specific negative error codes
      switch ((streaming_packet_status_t)status) {
-         case PACKET_SUCCESS: // Should have been caught by status >= 0
+         case STREAM_PACKET_SUCCESS: // Should have been caught by status >= 0
              return;
-         case PACKET_E_INVALID:
+         case STREAM_PACKET_E_INVALID:
              throw nb::value_error((prefix + "Invalid argument (e.g., NULL pointer).").c_str());
-         case PACKET_E_BADSIZE:
+         case STREAM_PACKET_E_BADSIZE:
              throw nb::value_error((prefix + "Buffer size error (too small, too large, or inconsistent).").c_str());
-         case PACKET_E_BADTYPE:
+         case STREAM_PACKET_E_BADTYPE:
              throw nb::value_error((prefix + "Incorrect packet type found during parsing.").c_str());
-         case PACKET_E_BADHASH:
+         case STREAM_PACKET_E_BADHASH:
              throw nb::value_error((prefix + "Parameter group hash mismatch during parsing.").c_str());
-         case PACKET_E_NODATA:
+         case STREAM_PACKET_E_NODATA:
              throw nb::value_error((prefix + "Required parameter data pointer is NULL.").c_str());
-         case PACKET_E_OVERFLOW:
+         case STREAM_PACKET_E_OVERFLOW:
               throw nb::value_error((prefix + "Data size exceeds packet format limits.").c_str());
-         case PACKET_E_INTERNAL:
+         case STREAM_PACKET_E_INTERNAL:
               throw std::runtime_error((prefix + "Internal packet processing inconsistency.").c_str());
-         case PACKET_E_NOMEM:
+         case STREAM_PACKET_E_NOMEM:
              throw std::bad_alloc(); // Map to standard C++ exception
          default:
              throw std::runtime_error((prefix + "Unknown packet processing error code: " + std::to_string(status)).c_str());
@@ -345,7 +345,7 @@ public:
 
         // Check header type
         const streaming_data_packet_header_t *header = (const streaming_data_packet_header_t *)buffer_ptr;
-        if (header->type != STREAMING_PACKET_TYPE_DATA) {
+        if (header->type != STREAMING_STREAM_PACKET_TYPE_DATA) {
             throw nb::value_error("Incorrect packet type");
         }
 
@@ -355,12 +355,12 @@ public:
             throw nb::value_error("Packet hash mismatch");
         }
 
-        // Check if buffer size matches expected size based on pset definition
+        // Check if buffer size matches expected size based on parameter_set definition
         size_t expected_payload_size = 0;
         if (pset_ptr->parameters) {
             for (size_t i = 0; i < pset_ptr->parameter_count; ++i) {
                 // NOTE: We don't check parameter[i].data here, only size,
-                // as we are reading *from* the packet, not writing *to* the pset.
+                // as we are reading *from* the packet, not writing *to* the parameter_set.
                 expected_payload_size += pset_ptr->parameters[i].size;
             }
         } else if (pset_ptr->parameter_count > 0) {
@@ -426,25 +426,25 @@ NB_MODULE(odin_stream, m) { // Choose a suitable module name
 
     // --- Bind Status Enums ---
     nb::enum_<parameter_set_status_t>(m, "ParameterSetStatus")
-        .value("SUCCESS", PARAM_SET_SUCCESS)
-        .value("E_NOMEM", PARAM_SET_E_NOMEM)
-        .value("E_FULL", PARAM_SET_E_FULL)
-        .value("E_DUPLICATE", PARAM_SET_E_DUPLICATE)
-        .value("E_NOTFOUND", PARAM_SET_E_NOTFOUND)
-        .value("E_INVALID", PARAM_SET_E_INVALID)
-        .value("E_INTERNAL", PARAM_SET_E_INTERNAL)
+        .value("SUCCESS", STREAM_PARAM_SET_SUCCESS)
+        .value("E_NOMEM", STREAM_PARAM_SET_ERROR_NOMEM)
+        .value("E_FULL", STREAM_PARAM_SET_ERROR_FULL)
+        .value("E_DUPLICATE", STREAM_PARAM_SET_ERROR_DUPLICATE)
+        .value("E_NOTFOUND", STREAM_PARAM_SET_ERROR_NOTFOUND)
+        .value("E_INVALID", STREAM_PARAM_SET_ERROR_INVALID)
+        .value("E_INTERNAL", STREAM_PARAM_SET_ERROR_INTERNAL)
         .export_values();
 
     nb::enum_<streaming_packet_status_t>(m, "StreamingPacketStatus")
-        .value("SUCCESS", PACKET_SUCCESS)
-        .value("E_INVALID", PACKET_E_INVALID)
-        .value("E_BADSIZE", PACKET_E_BADSIZE)
-        .value("E_BADTYPE", PACKET_E_BADTYPE)
-        .value("E_BADHASH", PACKET_E_BADHASH)
-        .value("E_NODATA", PACKET_E_NODATA)
-        .value("E_OVERFLOW", PACKET_E_OVERFLOW)
-        .value("E_INTERNAL", PACKET_E_INTERNAL)
-        .value("E_NOMEM", PACKET_E_NOMEM)
+        .value("SUCCESS", STREAM_PACKET_SUCCESS)
+        .value("E_INVALID", STREAM_PACKET_E_INVALID)
+        .value("E_BADSIZE", STREAM_PACKET_E_BADSIZE)
+        .value("E_BADTYPE", STREAM_PACKET_E_BADTYPE)
+        .value("E_BADHASH", STREAM_PACKET_E_BADHASH)
+        .value("E_NODATA", STREAM_PACKET_E_NODATA)
+        .value("E_OVERFLOW", STREAM_PACKET_E_OVERFLOW)
+        .value("E_INTERNAL", STREAM_PACKET_E_INTERNAL)
+        .value("E_NOMEM", STREAM_PACKET_E_NOMEM)
         .export_values();
 
      // --- Bind FixedSizeParameter Wrapper ---
