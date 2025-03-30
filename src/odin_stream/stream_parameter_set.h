@@ -45,6 +45,7 @@ typedef struct
     uint16_t payload_size;                       // Total size of the parameter data in bytes.
     uint16_t definition_identifier;              // Identifier for the parameter group.
     uint32_t last_header_transmission_timestamp; // Timestamp of the last header transmission.
+    uint32_t last_data_transmission_timestamp;   // Timestamp of the last data transmission.
     uint16_t last_transmission_sequence_number;  // Sequence number of the last header transmission.
 } stream_parameter_set_t;
 

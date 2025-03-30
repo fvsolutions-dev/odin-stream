@@ -51,7 +51,7 @@ void stream_decoding_manager_parse_packet(decoding_manager_t           *manager,
     // Check packet id
     stream_packet_header_t *header = (stream_packet_header_t *)data;
 
-    if (header->identifier == STREAM_STREAM_PACKET_TYPE_EVENT)
+    if (header->type == STREAM_STREAM_PACKET_TYPE_EVENT)
     {
         stream_event_t event = { 0 };
         if (stream_packet_parse_event(data, length, &event) != STREAM_PACKET_SUCCESS)

@@ -108,11 +108,11 @@ stream_parameter_set_t *stream_packet_parse_identifier(const uint8_t *buffer, si
  * @brief Generates a data packet into the provided buffer.
  * @see streaming_packet_create_data in streaming_packet.c for details.
  */
-int stream_packet_create_data(const stream_parameter_set_t *parameter_set,
-                              uint8_t                      *buffer,
-                              size_t                        buffer_size,
-                              uint32_t                      timestamp);
-
+int stream_packet_create_data(stream_parameter_set_t *parameter_set,
+                              uint8_t                *buffer,
+                              size_t                  buffer_size,
+                              uint32_t                timestamp,
+                              uint32_t                data_transmission_interval);
 /**
  * @brief Parses a data packet and populates data pointers of a compatible parameter set.
  * @see streaming_packet_parse_data in streaming_packet.c for details.

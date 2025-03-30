@@ -185,15 +185,23 @@ stream_parameter_set_t *stream_packet_parse_identifier(const uint8_t *buffer, si
  * @return STREAM_PACKET_ERROR_NODATA if any parameter in the set has a NULL data pointer.
  * @return STREAM_PACKET_ERROR_BADSIZE if buffer_size is insufficient for the header and all parameter data.
  */
-int stream_packet_create_data(const stream_parameter_set_t *parameter_set,
+int stream_packet_create_data(stream_parameter_set_t *parameter_set,
                               uint8_t                      *buffer,
                               size_t                        buffer_size,
-                              uint32_t                      timestamp)
+                              uint32_t                      timestamp,
+                              uint32_t                      data_transmission_interval)
 {
+
     if (!parameter_set || !buffer)
     {
         return STREAM_PACKET_ERROR_INVALID;
     }
+
+    if (timestamp - parameter_set->last_data_transmission_timestamp < data_transmission_interval)
+    {
+        return STREAM_PACKET_SUCCESS; // No need to send data yet
+    }
+
     if (!parameter_set->parameters && parameter_set->parameter_count > 0)
     {
         return STREAM_PACKET_ERROR_INTERNAL; // Inconsistent state
@@ -228,9 +236,12 @@ int stream_packet_create_data(const stream_parameter_set_t *parameter_set,
     packet_header->header.type                    = STREAM_STREAM_PACKET_TYPE_DATA;
     packet_header->header.identifier              = parameter_set->parameter_set_identifier;
     packet_header->timestamp                      = timestamp;
+    packet_header->sequence_number                = parameter_set->last_transmission_sequence_number++;
 
     // Sanity check that we wrote exactly the expected number of bytes
     assert((size_t)(payload_write_ptr - buffer) == required_total_size);
+    
+    parameter_set->last_data_transmission_timestamp = timestamp;
 
     // Return bytes written (cast is safe as required_total_size checked against buffer_size)
     return (int)required_total_size;
@@ -394,5 +405,3 @@ stream_packet_status_t stream_packet_parse_event(const uint8_t *buffer, size_t b
     event->event_sequence = packet_header->sequence_number;
     return STREAM_PACKET_SUCCESS;
 }
-
-
