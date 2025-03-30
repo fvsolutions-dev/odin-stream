@@ -4,7 +4,6 @@
             "name": "Win32",
             "includePath": [
                 "${workspaceFolder}/**",
-                "${workspaceFolder}/.venv/Lib/site-packages/nanobind/include/nanobind", //To be fixed
                 "${env:PYTHON_INCLUDE}"
             ],
             "defines": [

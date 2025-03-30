@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15...3.26)
 
-# If ESP-IDF is reading this CMakeLists.txt, skip it
+# If ESP-IDF is reading this CMakeLists.txt, register it as an ESP-IDF component
 if(DEFINED ENV{IDF_PATH})
   idf_component_register(SRCS "src/streaming_packet.c"
     "src/parameter_set.c"
@@ -8,6 +8,18 @@ if(DEFINED ENV{IDF_PATH})
     INCLUDE_DIRS "src"
     REQUIRES "odin")
 
+  return()
+endif()
+
+# If Zephyr is reading this CMakeLists.txt, register it as a Zephyr module
+if(DEFINED ENV{ZEPHYR_BASE})
+  zephyr_library_named(odin-stream)
+  zephyr_library_sources(
+    "src/streaming_packet.c"
+    "src/parameter_set.c"
+  )
+
+  target_include_directories(odin-stream PUBLIC src)
   return()
 endif()
 
@@ -47,6 +59,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 option(COVERAGE "Enable coverage reporting" ON)
+
 if(COVERAGE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -fprofile-arcs -ftest-coverage")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g -fprofile-arcs -ftest-coverage")

@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Python C++ Debug",
+      "name": "Python & C++: Current File",
       "type": "pythoncpp",
       "request": "launch",
       "pythonLaunchName": "Python: Current File",

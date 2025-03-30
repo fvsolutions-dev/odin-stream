@@ -4,8 +4,9 @@
 		{
 			"type": "shell",
 			"label": "pip install",
-			"command": "pip",
+			"command": "uv",
 			"args": [
+				"pip",
 				"install",
 				"--no-build-isolation",
 				"-ve",
