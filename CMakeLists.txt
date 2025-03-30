@@ -2,8 +2,9 @@ cmake_minimum_required(VERSION 3.15...3.26)
 
 # If ESP-IDF is reading this CMakeLists.txt, register it as an ESP-IDF component
 if(DEFINED ENV{IDF_PATH})
-  idf_component_register(SRCS "src/streaming_packet.c"
-    "src/parameter_set.c"
+  idf_component_register(SRCS 
+    "src/odin_stream/stream_packet.c"
+    "src/odin_stream/stream_parameter_set.c"
     "src/odin_stream.c"
     INCLUDE_DIRS "src"
     REQUIRES "odin")
@@ -15,8 +16,9 @@ endif()
 if(DEFINED ENV{ZEPHYR_BASE})
   zephyr_library_named(odin-stream)
   zephyr_library_sources(
-    "src/streaming_packet.c"
-    "src/parameter_set.c"
+    "src/odin_stream/stream_packet.c"
+    "src/odin_stream/stream_parameter_set.c"
+    "src/odin_stream.c"
   )
 
   target_include_directories(odin-stream PUBLIC src)
