@@ -10,6 +10,7 @@
  */
 typedef enum
 {
+    STREAM_STREAM_PACKET_TYPE_INVALID    = 0x00, ///< Unknown packet type.
     STREAM_STREAM_PACKET_TYPE_IDENTIFIER = 0x01, ///< Packet contains parameter identifiers and sizes.
     STREAM_STREAM_PACKET_TYPE_DATA       = 0x02, ///< Packet contains parameter data.
     STREAM_STREAM_PACKET_TYPE_EVENT      = 0x0B, ///< Packet contains an event.
@@ -64,6 +65,15 @@ typedef struct
 
 #pragma pack(pop)
 
+typedef struct
+{
+    uint16_t       event_id;       // Identifier for the event.
+    uint16_t       event_sequence; // Last sequence number for the event.
+    uint32_t       timestamp;      // Timestamp for the event.
+    const uint8_t *event_data;     // Pointer to the event data.
+    uint16_t       event_size;     // Size of the event data in bytes.
+} stream_event_t;
+
 /** @brief Error codes for streaming_packet functions */
 typedef enum
 {
@@ -83,32 +93,59 @@ typedef enum
  * @see streaming_packet_create_identifier in streaming_packet.c for details.
  */
 int stream_packet_create_identifier(stream_parameter_set_t *parameter_set,
-                                    uint8_t         *buffer,
-                                    size_t           buffer_size,
-                                    uint32_t         timestamp,
-                                    uint32_t         header_transmission_interval);
+                                    uint8_t                *buffer,
+                                    size_t                  buffer_size,
+                                    uint32_t                timestamp,
+                                    uint32_t                header_transmission_interval);
 
 /**
  * @brief Parses an identifier packet and creates a new parameter set.
  * @see streaming_packet_parse_identifier in streaming_packet.c for details.
  */
- stream_parameter_set_t *stream_packet_parse_identifier(const uint8_t *buffer, size_t buffer_size);
+stream_parameter_set_t *stream_packet_parse_identifier(const uint8_t *buffer, size_t buffer_size);
 
 /**
  * @brief Generates a data packet into the provided buffer.
  * @see streaming_packet_create_data in streaming_packet.c for details.
  */
 int stream_packet_create_data(const stream_parameter_set_t *parameter_set,
-                              uint8_t               *buffer,
-                              size_t                 buffer_size,
-                              uint32_t               timestamp);
+                              uint8_t                      *buffer,
+                              size_t                        buffer_size,
+                              uint32_t                      timestamp);
 
 /**
  * @brief Parses a data packet and populates data pointers of a compatible parameter set.
  * @see streaming_packet_parse_data in streaming_packet.c for details.
  */
-stream_packet_status_t stream_packet_parse_data(const uint8_t   *buffer,
-                                                size_t           buffer_size,
+stream_packet_status_t stream_packet_parse_data(const uint8_t          *buffer,
+                                                size_t                  buffer_size,
                                                 stream_parameter_set_t *parameter_set);
+
+/**
+ * @brief Parses an event packet and populates the event structure.
+ * @see streaming_packet_parse_event in streaming_packet.c for details.
+ */
+stream_packet_status_t stream_packet_parse_event(const uint8_t *buffer, size_t buffer_size, stream_event_t *event);
+
+/**
+ * @brief Generates an event packet into the provided buffer.
+ * @see streaming_packet_create_event in streaming_packet.c for details.
+ */
+int stream_packet_create_event(uint8_t *buffer, size_t buffer_size, stream_event_t event);
+
+/**
+ * @brief Retrieves the packet type from the provided buffer.
+ * @param buffer Pointer to the buffer containing the packet data
+ * @param buffer_size Size of the buffer in bytes.
+ * @return The packet type as defined in stream_packet_type_t.
+ */
+inline stream_packet_type_t stream_packet_get_type(const uint8_t *buffer, size_t buffer_size)
+{
+    if (!buffer || buffer_size < sizeof(stream_packet_header_t))
+    {
+        return STREAM_STREAM_PACKET_TYPE_INVALID; // Invalid input
+    }
+    return ((stream_packet_header_t *)buffer)->type;
+}
 
 #endif // STREAM_STREAM_PACKET_H

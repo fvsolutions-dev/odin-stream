@@ -1,4 +1,5 @@
 #include "odin_stream/stream_packet.h"
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
@@ -19,10 +20,10 @@
  * @return STREAM_PACKET_ERROR_INTERNAL if parameter_set state is inconsistent (e.g., null parameters array).
  */
 int stream_packet_create_identifier(stream_parameter_set_t *parameter_set,
-                                       uint8_t                *buffer,
-                                       size_t                  buffer_size,
-                                       uint32_t                timestamp,
-                                       uint32_t                header_transmission_interval)
+                                    uint8_t                *buffer,
+                                    size_t                  buffer_size,
+                                    uint32_t                timestamp,
+                                    uint32_t                header_transmission_interval)
 {
     if (!parameter_set || !buffer)
     {
@@ -185,9 +186,9 @@ stream_parameter_set_t *stream_packet_parse_identifier(const uint8_t *buffer, si
  * @return STREAM_PACKET_ERROR_BADSIZE if buffer_size is insufficient for the header and all parameter data.
  */
 int stream_packet_create_data(const stream_parameter_set_t *parameter_set,
-                                 uint8_t                      *buffer,
-                                 size_t                        buffer_size,
-                                 uint32_t                      timestamp)
+                              uint8_t                      *buffer,
+                              size_t                        buffer_size,
+                              uint32_t                      timestamp)
 {
     if (!parameter_set || !buffer)
     {
@@ -256,8 +257,8 @@ int stream_packet_create_data(const stream_parameter_set_t *parameter_set,
  * @return streaming_packet_status_t indicating success or failure reason.
  */
 stream_packet_status_t stream_packet_parse_data(const uint8_t          *buffer,
-                                                   size_t                  buffer_size,
-                                                   stream_parameter_set_t *parameter_set)
+                                                size_t                  buffer_size,
+                                                stream_parameter_set_t *parameter_set)
 {
     if (!buffer || !parameter_set)
     {
@@ -313,3 +314,85 @@ stream_packet_status_t stream_packet_parse_data(const uint8_t          *buffer,
 
     return STREAM_PACKET_SUCCESS;
 }
+
+/**
+ * @brief Creates a stream event packet and writes it to the provided buffer.
+ *
+ * @param buffer Pointer to the buffer where the packet will be written.
+ * @param buffer_size Size of the buffer in bytes.
+ * @param event The stream event to be serialized into the packet.
+ * @return int The number of bytes written to the buffer on success, or an error code:
+ *         - STREAM_PACKET_ERROR_INVALID: If the buffer or event data is NULL.
+ *         - STREAM_PACKET_ERROR_BADSIZE: If the buffer is too small to hold the packet.
+ */
+int stream_packet_create_event(uint8_t *buffer, size_t buffer_size, stream_event_t event);
+
+int stream_packet_create_event(uint8_t *buffer, size_t buffer_size, stream_event_t event)
+{
+    if (!buffer || !event.event_data)
+    {
+        return STREAM_PACKET_ERROR_INVALID;
+    }
+    size_t required_total_size = sizeof(streaming_event_packet_header_t) + event.event_size;
+
+    // Packet should fit in the buffer
+    if (buffer_size < required_total_size)
+    {
+        return STREAM_PACKET_ERROR_BADSIZE; // Buffer too small
+    }
+
+    // Write payload data by concatenating parameter data
+    uint8_t *payload_write_ptr = buffer + sizeof(streaming_event_packet_header_t);
+    memcpy(payload_write_ptr, event.event_data, event.event_size);
+
+    // Write header
+    streaming_event_packet_header_t *packet_header = (streaming_event_packet_header_t *)buffer;
+    packet_header->header.type                     = STREAM_STREAM_PACKET_TYPE_EVENT;
+    packet_header->header.identifier               = event.event_id;
+    packet_header->timestamp                       = event.timestamp;
+
+    // Return bytes written (cast is safe as required_total_size checked against buffer_size)
+    return (int)required_total_size;
+}
+
+/**
+ * @brief Parses a stream event packet from the provided buffer.
+ *
+ * @param buffer Pointer to the buffer containing the packet data.
+ * @param buffer_size Size of the buffer in bytes.
+ * @param event Pointer to the stream_event_t structure where the parsed event will be stored.
+ *          Note: The event_data pointer in the event structure will point to the data in the buffer
+ *          the caller must ensure that the buffer remains valid for the lifetime of the event handling.
+ * @return stream_packet_status_t Status of the parsing operation:
+ *         - STREAM_PACKET_SUCCESS: If the packet was successfully parsed.
+ *         - STREAM_PACKET_ERROR_INVALID: If the buffer or event pointer is NULL.
+ *         - STREAM_PACKET_ERROR_BADSIZE: If the buffer is too small to contain the header.
+ *         - STREAM_PACKET_ERROR_BADTYPE: If the packet type is not STREAM_STREAM_PACKET_TYPE_EVENT.
+ */
+stream_packet_status_t stream_packet_parse_event(const uint8_t *buffer, size_t buffer_size, stream_event_t *event)
+{
+    if (!buffer || !event)
+    {
+        return STREAM_PACKET_ERROR_INVALID;
+    }
+    if (buffer_size < sizeof(streaming_event_packet_header_t))
+    {
+        return STREAM_PACKET_ERROR_BADSIZE; // Buffer too small for header
+    }
+
+    const streaming_event_packet_header_t *packet_header = (const streaming_event_packet_header_t *)buffer;
+    if (packet_header->header.type != STREAM_STREAM_PACKET_TYPE_EVENT)
+    {
+        return STREAM_PACKET_ERROR_BADTYPE;
+    }
+
+    // Parse event data
+    event->event_data     = buffer + sizeof(streaming_event_packet_header_t);
+    event->event_size     = buffer_size - sizeof(streaming_event_packet_header_t);
+    event->event_id       = packet_header->header.identifier;
+    event->timestamp      = packet_header->timestamp;
+    event->event_sequence = packet_header->sequence_number;
+    return STREAM_PACKET_SUCCESS;
+}
+
+
