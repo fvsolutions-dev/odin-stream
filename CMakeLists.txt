@@ -98,8 +98,8 @@ nanobind_add_module(
   NB_STATIC
 
   # Source code goes here
-  src/parameter_set.c
-  src/streaming_packet.c
+  src/odin_stream/stream_packet.c
+  src/odin_stream/stream_parameter_set.c
   src/python_bindings.cpp
 )
 

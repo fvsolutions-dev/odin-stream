@@ -70,7 +70,7 @@ stream_parameter_set_status_t stream_parameter_set_add(stream_parameter_set_t   
                                                        stream_fixed_size_parameter_t parameter);
 stream_parameter_set_status_t stream_parameter_set_remove_by_index(stream_parameter_set_t *parameter_set,
                                                                    uint32_t                parameter_index);
-stream_parameter_set_status_t stream_parameter_set_clear(stream_parameter_set_t *parameter_set);
-stream_parameter_set_status_t stream_parameter_set_recalculate_hash(stream_parameter_set_t *parameter_set);
+// stream_parameter_set_status_t stream_parameter_set_clear(stream_parameter_set_t *parameter_set);
+// stream_parameter_set_status_t stream_parameter_set_recalculate_hash(stream_parameter_set_t *parameter_set);
 
 #endif // PARAMETER_SET_H
