@@ -22,6 +22,8 @@ if(DEFINED ENV{ZEPHYR_BASE})
   )
 
   target_include_directories(odin-stream PUBLIC src)
+  target_link_libraries(odin-stream PRIVATE odin)
+
   return()
 endif()
 
