@@ -16,8 +16,11 @@ start = time.time()
 processor = odin_stream.StreamProcessor()
 processor.process_bytes_list(data)
 
+print(pl.from_arrow(processor.get_parameter_set(25762).flush_to_arrow_table()))
+print(pl.from_arrow(processor.get_parameter_set(6684).flush_to_arrow_table()))
 end = time.time()
 print(f"Execution time: {end - start} ms")
 # print(result)
+
 
 

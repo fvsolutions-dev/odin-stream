@@ -3,35 +3,29 @@
 #include <arrow/ipc/api.h>
 #include <arrow/util/logging.h>
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/list.h>
 #include <nanobind/stl/shared_ptr.h>  // Make sure to include this for shared_ptr support
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/unordered_map.h>  // May be needed for binding map access if desired
+#include <nanobind/stl/vector.h>
 #include <nanobind_pyarrow/pyarrow_import.h>
 #include <nanobind_pyarrow/table.h>
-
 // --- Include Refactored C API Headers ---
 extern "C" {
 #include "odin_stream/stream_packet.h"
 #include "odin_stream/stream_parameter_set.h"
 }
 
-#include <memory>
-#include <vector>
-// #include "parameterset.hpp"
+// #include <cstdint>
+// #include <iomanip>
+// #include <limits>  // Required by MSVC for numeric_limits sometimes with nanobind
+// #include <memory>
+// #include <sstream>
+// #include <stdexcept>
+// #include <string>
+// #include <vector>
 
-#include <nanobind/nanobind.h>
-#include <nanobind/stl/list.h>
-#include <nanobind/stl/string.h>
-#include <nanobind/stl/unordered_map.h>  // May be needed for binding map access if desired
-#include <nanobind/stl/vector.h>
-
-#include <cstdint>
-#include <iomanip>
-#include <limits>  // Required by MSVC for numeric_limits sometimes with nanobind
-#include <sstream>
-#include <stdexcept>
-#include <string>
-#include <vector>
-
-#include "enums.hpp"
+// #include "enums.hpp"
 #include "fixed_size_parameter.hpp"
 #include "parameterset.hpp"
 
@@ -82,7 +76,7 @@ class StreamProcessor {
    private:
 	std::unordered_map<uint16_t, ParameterSet> parameter_sets_map;
 
-   public:
+public:
 	StreamProcessor() = default;
 	// --- Rule of 5/0 ---
 	// Explicitly delete copy operations because the map member
@@ -92,8 +86,8 @@ class StreamProcessor {
 
 	// Default move operations are likely okay since std::unordered_map
 	// and ParameterSet (based on your .hpp) are movable.
-	StreamProcessor(StreamProcessor&&) = default;
-	StreamProcessor& operator=(StreamProcessor&&) = default;
+	StreamProcessor(StreamProcessor&&) = delete;
+	StreamProcessor& operator=(StreamProcessor&&) = delete;
 	// --- End Rule of 5/0 ---
 
 	void process_bytes_list(nb::list bytes_list) {
@@ -115,7 +109,7 @@ class StreamProcessor {
 					continue;
 				}
 
-				ParameterSet parsed_set = ParameterSet::parse_identifier_packet(item);
+				ParameterSet parsed_set = ParameterSet::from_identifier_data(item);
 				uint16_t identifier = parsed_set.get_hash();
 
 				parameter_sets_map.insert_or_assign(identifier, std::move(parsed_set));
@@ -144,6 +138,16 @@ class StreamProcessor {
 	}
 
 	size_t get_parameter_set_count() const { return parameter_sets_map.size(); }
+
+	// Get the ParameterSet by identifier
+	ParameterSet get_parameter_set(uint16_t identifier) {
+		auto it = parameter_sets_map.find(identifier);
+		if (it != parameter_sets_map.end()) {
+			return it->second;
+		} else {
+			throw nb::key_error("ParameterSet with the given identifier not found.");
+		}
+	}
 
 	void clear_parameter_sets() {
 		parameter_sets_map.clear();
@@ -242,7 +246,7 @@ NB_MODULE(odin_stream, m) {  // Changed module name to avoid collision and be mo
 	m.def("process_data", &create_mixed_table, "Creates an Arrow table with integer and float columns.");
 
 	// Expose the function to create the table
-	m.def("test_create", &create_mixed_table, "Creates an Arrow table with integer and float columns.");
+	// m.def("test_create", &create_mixed_table, "Creates an Arrow table with integer and float columns.");
 
 	nb::class_<StreamProcessor>(m, "StreamProcessor")
 		.def(nb::init<>(), "Constructor for the StreamProcessor.")
@@ -250,9 +254,11 @@ NB_MODULE(odin_stream, m) {  // Changed module name to avoid collision and be mo
 	         "Processes a list of byte packets. Stores ParameterSets from "
 	         "identifier packets and uses them to parse corresponding data packets.")
 		.def("get_parameter_set_count", &StreamProcessor::get_parameter_set_count, "Returns the number of ParameterSets currently stored.")
-		.def("clear_parameter_sets", &StreamProcessor::clear_parameter_sets, "Removes all stored ParameterSets.");
+		.def("clear_parameter_sets", &StreamProcessor::clear_parameter_sets, "Removes all stored ParameterSets.")
+		.def("get_parameter_set", &StreamProcessor::get_parameter_set, nb::arg("identifier"),
+	         "Returns the ParameterSet corresponding to the given identifier.");
 
-	init_enums(m);
+	// init_enums(m);
 	init_fixed_size_parameter(m);  // Initialize the FixedSizeParameter bindings
-	init_parameterset(m);
+	init_parameterset(m);  // Initialize the ParameterSet bindings
 }

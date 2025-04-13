@@ -1,39 +1,63 @@
 #pragma once
 
+#include <arrow/builder.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/list.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
+#include <nanobind_pyarrow/table.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
-
-extern "C" {
-#include "odin_stream/stream_packet.h"
-#include "odin_stream/stream_parameter_set.h"
-}
-
-namespace nb = nanobind;
 
 class FixedSizeParameter {
    private:
 	uint32_t index;
-	nb::bytes data_buffer;
+	uint16_t size;
+	std::vector<uint8_t> packets;
+	uint32_t num_packets = 0;  // Number of packets received
 
    public:
-	FixedSizeParameter(uint32_t idx, nb::bytes data);
-
+	FixedSizeParameter(uint32_t idx, uint16_t data_size);
+	// Rule 5
+	// FixedSizeParameter(const FixedSizeParameter&) = delete;  // Disable copy constructor
+	// FixedSizeParameter& operator=(const FixedSizeParameter&) = delete;  // Disable copy assignment
+	// FixedSizeParameter(FixedSizeParameter&&) = default;  // Default move constructor
+	// FixedSizeParameter& operator=(FixedSizeParameter&&) = default;  // Default move assignment
 	uint32_t get_index() const;
 	void set_index(uint32_t new_index);
 
-	nb::bytes get_data() const;
-	void set_data(nb::bytes new_data);
+	// add data method, to use with Arrow's builder
+	void add_data(const uint8_t* data, size_t size);
+	uint32_t get_num_packets() const {
+		return num_packets;
+	}
+	uint16_t get_size() const {
+		return size;
+	}
+	size_t get_packets_buffer_size() const {
+		return packets.size();
+	}
+    // Clears the stored packet data and resets the count
+    void clear_data() {
+        packets.clear();
+        packets.shrink_to_fit(); // Optional: release memory
+        num_packets = 0;
+    }
 
-	uint32_t get_size() const;
-
-	stream_fixed_size_parameter_t to_c_struct() const;
-
-	std::string repr() const;
+	const std::vector<uint8_t>& get_packets_buffer() const {
+		return packets;
+	}
+	
+	// --- Other Methods ---
+	std::string repr() const {
+		return "FixedSizeParameter(index=" + std::to_string(index) +
+			", packet_size=" + std::to_string(size) +
+			", num_packets=" + std::to_string(num_packets) +
+			", buffer_size=" + std::to_string(packets.size()) + ")";
+			// Add more details if needed, but avoid printing large buffers
+}
 };
 
-void init_fixed_size_parameter(nb::module_& m);
+void init_fixed_size_parameter(nanobind::module_& m);

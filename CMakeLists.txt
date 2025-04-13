@@ -29,6 +29,9 @@ endif()
 
 project(i_think_this_name_does_not_matter LANGUAGES C CXX)
 
+# create compile_commands.json
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 if(NOT SKBUILD)
   message(WARNING "\
   This CMake file is meant to be executed using 'scikit-build'. Running
@@ -119,11 +122,11 @@ nanobind_add_module(
   # Source code goes here
   src/odin_stream/stream_packet.c
   src/odin_stream/stream_parameter_set.c
-  src/python_bindings.cpp
+  # src/enums.cpp
   src/fixed_size_parameter.cpp
-  src/enums.cpp
   src/parameterset.cpp
-)
+  src/python_bindings.cpp
+  )
 
 nanobind_add_stub(
   odin_stream_stub
@@ -131,7 +134,7 @@ nanobind_add_stub(
   MODULE odin_stream
   OUTPUT odin_stream.pyi
   PYTHON_PATH $<TARGET_FILE_DIR:odin_stream>
-  DEPENDS odin_stream
+  DEPENDS odin_stream 
 )
 
 target_include_directories(odin_stream PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
