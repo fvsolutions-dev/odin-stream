@@ -21,6 +21,10 @@ class ParameterSet {
 	uint16_t parameter_set_identifier;           // Identifier of the parameter set
 	uint32_t definition_identifier;              // Identifier for the definition of the parameter set
 	uint32_t data_size;                          // Expected size of the data
+	// --- NEW: Storage for sequence ID and timestamp per packet ---
+	std::vector<uint16_t> sequence_ids_;  // Assuming uint64_t for sequence ID
+	std::vector<uint32_t> timestamps_;    // Assuming uint64_t for timestamp (e.g., ns)
+
    public:
 	ParameterSet(uint16_t identifier, uint32_t definition_identifier);
 	~ParameterSet();
