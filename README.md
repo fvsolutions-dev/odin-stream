@@ -70,7 +70,7 @@ uv pip install --reinstall --no-build-isolation -Ceditable.rebuild=true -ve .
 They are generated automatically buy can also be generated 
 
 ```
-python -m nanobind.stubgen -m nanobind_example_ext
+python -m nanobind.stubgen -m odin_stream
 ```
 
 ### Test

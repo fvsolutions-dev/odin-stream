@@ -57,6 +57,7 @@ find_package(Python 3.8
   REQUIRED COMPONENTS Interpreter Development.Module
   OPTIONAL_COMPONENTS Development.SABIModule)
 
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
@@ -77,6 +78,22 @@ list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
 # Import nanobind through CMake's find_package mechanism
 find_package(nanobind CONFIG REQUIRED)
 
+
+
+include(FetchContent)
+FetchContent_Declare(
+  nanobind_pyarrow
+  GIT_REPOSITORY https://github.com/maximiliank/nanobind_pyarrow.git
+  GIT_TAG origin/main
+  UPDATE_DISCONNECTED ON)
+
+FetchContent_MakeAvailable(nanobind_pyarrow)
+
+
+if(NOT TARGET nanobind_pyarrow::pyarrow)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${nanobind_pyarrow_SOURCE_DIR}/cmake")
+find_package(PyArrow REQUIRED)
+endif()
 # We are now ready to compile the actual extension module
 nanobind_add_module(
 
@@ -106,7 +123,6 @@ nanobind_add_module(
 )
 
 nanobind_add_stub(
-
   odin_stream_stub
   INSTALL_TIME
   MODULE odin_stream
@@ -116,6 +132,7 @@ nanobind_add_stub(
 )
 
 target_include_directories(odin_stream PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(odin_stream PRIVATE nanobind_pyarrow::nanobind_pyarrow nanobind_pyarrow::pyarrow)
 
 # Install directive for scikit-build-core
 install(TARGETS odin_stream LIBRARY DESTINATION ".")
