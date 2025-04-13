@@ -7,6 +7,7 @@ authors = [{ name = "Floris vernieuwe", email = "floris@vernieuwe.eu" }]
 readme = "README.md"
 dependencies = [
     "nanobind>=2.6.1",
+    "polars>=1.27.1",
     "pyarrow",
 ]
 license-files = ["LICENSE"]
@@ -19,7 +20,6 @@ dev = [
   "pytest-cov>=6.0.0,<7.0.0",
   "pytest-benchmark>=5.1.0,<6.0.0",
 ]
-[project.optional-dependencies]
 
 
 [build-system]

@@ -120,6 +120,9 @@ nanobind_add_module(
   src/odin_stream/stream_packet.c
   src/odin_stream/stream_parameter_set.c
   src/python_bindings.cpp
+  src/fixed_size_parameter.cpp
+  src/enums.cpp
+  src/parameterset.cpp
 )
 
 nanobind_add_stub(

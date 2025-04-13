@@ -3,8 +3,9 @@
         {
             "name": "Win32",
             "includePath": [
-                "${workspaceFolder}/**",
-                "${env:PYTHON_INCLUDE}"
+                "${workspaceFolder}/src/**",
+                "${env:PYTHON_INCLUDE}",
+                ".venv/lib/python3.13/site-packages/nanobind/include"
             ],
             "defines": [
                 "_DEBUG",
