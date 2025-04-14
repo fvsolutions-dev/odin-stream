@@ -2,6 +2,7 @@
 
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/list.h>
+#include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 
@@ -78,9 +79,9 @@ ParameterSet::~ParameterSet() {
 	// The map will automatically clean up its contents when it goes out of scope
 }
 
-void ParameterSet::add(FixedSizeParameter param) {
+void ParameterSet::add(std::shared_ptr<FixedSizeParameter> param) {
 	parameters.push_back(param);
-	data_size += param.get_size();
+	data_size += param->get_size();  // Update the total data size
 }
 
 std::shared_ptr<ParameterSet> ParameterSet::from_identifier_data(nanobind::bytes data, std::shared_ptr<TypeDescriptors> type_descriptors) {
@@ -95,8 +96,17 @@ std::shared_ptr<ParameterSet> ParameterSet::from_identifier_data(nanobind::bytes
 	// Add the fixed size parameters to the map
 	for (size_t i = 0; i < new_pset_ptr->parameter_count; ++i) {
 		const stream_fixed_size_parameter_t& c_param = new_pset_ptr->parameters[i];
-		FixedSizeParameter param(c_param.index, c_param.size, type_descriptors->get_type_descriptor(c_param.index));
-		parameterset.add(param);
+
+        std::optional<std::shared_ptr<TypeDescriptor>> type = type_descriptors->get_type_descriptor(c_param.index);
+
+        if (!type) {
+            printf("Warning: Type descriptor not found for index %u. Skipping parameter.\n", c_param.index);
+            continue;  // Skip if type descriptor is not found
+        }
+
+		auto parawm =
+			std::make_shared<FixedSizeParameter>(FixedSizeParameter(c_param.index, c_param.size, type.value()));  // Create a new FixedSizeParameter object
+		parameterset.add(parawm);  // Use shared_ptr for memory management
 	}
 
 	// Clean up the C struct
@@ -118,7 +128,6 @@ std::shared_ptr<ParameterSet> ParameterSet::from_identifier_data(nanobind::bytes
 //  * @throws std::logic_error if the ParameterSet instance has internal inconsistencies.
 //  */
 void ParameterSet::parse_data_packet(nb::bytes data) {
-	return;
 	// Check minimum size for header
 	if (data.size() < sizeof(streaming_data_packet_header_t)) {
 		throw nb::value_error("Input data too small to contain data packet header.");
@@ -137,16 +146,14 @@ void ParameterSet::parse_data_packet(nb::bytes data) {
 	}
 
 	if (data.size() != sizeof(streaming_data_packet_header_t) + data_size) {
-		printf("Data size: %zu, expected size: %zu\n", data.size(), sizeof(streaming_data_packet_header_t) + data_size);
-		throw nb::value_error("Packet size mismatch");
+		// printf("Data size: %zu, expected size: %zu\n", data.size(), sizeof(streaming_data_packet_header_t) + data_size);
+		// throw nb::value_error("Packet size mismatch");
+        return;  // Skip if size doesn't match
 	}
-
 	const uint8_t* payload_ptr = (const uint8_t*)data.c_str() + sizeof(streaming_data_packet_header_t);
 	for (size_t i = 0; i < parameters.size(); ++i) {
-		size_t param_size = parameters[i].get_size();
-
-		parameters[i].add_data(payload_ptr, param_size);  // Add data to the parameter
-
+		size_t param_size = parameters[i]->get_size();
+		parameters[i]->add_data(payload_ptr, param_size);  // Add data to the parameter
 		payload_ptr += param_size;
 	}
 
@@ -174,169 +181,26 @@ void ParameterSet::parse_data_packet(nb::bytes data) {
 
 // --- flush_to_arrow_table (Modified) ---
 std::shared_ptr<arrow::Table> ParameterSet::flush_to_arrow_table() {
-	// arrow::MemoryPool* pool = arrow::default_memory_pool();
+	std::vector<std::shared_ptr<arrow::Field>> fields;
+	std::vector<std::shared_ptr<arrow::Array>> arrays;
+    uint32_t datapoints = 0;
+	for (const auto& param : parameters) {
+		
+        std::vector<std::pair<std::shared_ptr<arrow::Array>, std::shared_ptr<arrow::Field>>> data = param->finish();
+        datapoints = param->get_datapoints();
 
-	// // --- 1. Handle Empty Parameter Set (Definition) ---
-	// // If parameters vector is empty, but we might have received packets? Unlikely scenario.
-	// // The main check is whether any *packets* have been received.
-	// if (sequence_ids_.empty()) { // Check if any packets were processed
-	//     // If parameters is also empty, return truly empty table
-	//     if (parameters.empty()) {
-	//          auto schema = arrow::schema({}); // Empty schema
-	//          return arrow::Table::Make(schema, std::vector<std::shared_ptr<arrow::Array>>{}, 0);
-	//     } else {
-	//          // We have a definition but no data. Return table with schema but 0 rows.
-	//          std::vector<std::shared_ptr<arrow::Field>> fields;
-	//          fields.reserve(2 + parameters.size()); // SeqId, Timestamp + Params
+        for (const auto& [array, field] : data) {
+            fields.push_back(field);
+            arrays.push_back(array);
+        }
+	}
 
-	// // Add SeqId/Timestamp fields even with 0 rows
-	// fields.push_back(arrow::field("sequence_id", arrow::uint64())); // Adjust type if needed
-	// fields.push_back(arrow::field("timestamp", arrow::uint64()));   // Adjust type if needed
 
-	// for (const auto& param : parameters) {
-	//     int32_t packet_size = static_cast<int32_t>(param.get_size());
-	//     if (packet_size <= 0) {
-	//        throw std::runtime_error("Parameter index " + std::to_string(param.get_index()) + " has invalid packet size: " + std::to_string(packet_size));
-	//     }
-	//     auto field_type = arrow::fixed_size_binary(packet_size);
-	//     fields.push_back(arrow::field(std::to_string(param.get_index()), field_type));
-	// }
-	// auto schema = arrow::schema(fields);
-	// // Create empty arrays matching the schema
-	// std::vector<std::shared_ptr<arrow::Array>> arrays;
-	// arrays.reserve(fields.size());
-	// for(const auto& field : fields) {
-	//     std::unique_ptr<arrow::ArrayBuilder> builder;
-	//     ARROW_THROW_NOT_OK(arrow::MakeBuilder(pool, field->type(), &builder));
-	//     std::shared_ptr<arrow::Array> empty_array;
-	//     ARROW_ASSIGN_OR_THROW(empty_array, builder->Finish());
-	//     arrays.push_back(empty_array);
-	// }
-	// return arrow::Table::Make(schema, arrays, 0); // Table with schema, 0 rows
-	//}
-	//}
+	auto schema = arrow::schema(fields);
+	auto table = arrow::Table::Make(schema, arrays, datapoints);
 
-	// // --- 2. Determine Number of Rows and Check Consistency ---
-	// int64_t num_rows = static_cast<int64_t>(sequence_ids_.size());
 
-	// // Check if timestamp vector size matches
-	// if (static_cast<int64_t>(timestamps_.size()) != num_rows) {
-	//      throw std::runtime_error("Internal inconsistency: Number of sequence IDs (" +
-	//                             std::to_string(num_rows) + ") does not match number of timestamps (" +
-	//                             std::to_string(timestamps_.size()) + ").");
-	// }
-
-	// // Check if all parameters have the same number of packets received
-	// for (const auto& param : parameters) {
-	//     if (static_cast<int64_t>(param.get_num_packets()) != num_rows) {
-	//         throw std::runtime_error("Inconsistent number of packets across parameters. Expected " +
-	//                                  std::to_string(num_rows) + " (based on headers received), but parameter index " +
-	//                                  std::to_string(param.get_index()) + " has " +
-	//                                  std::to_string(param.get_num_packets()) + " packets.");
-	//     }
-	//     // Optional: Re-check internal consistency of parameter buffers (already present in original code)
-	//     if (param.get_packets_buffer_size() != static_cast<size_t>(num_rows) * param.get_size()) {
-	//          throw std::runtime_error("Internal inconsistency: buffer size (" + std::to_string(param.get_packets_buffer_size()) +
-	//                                   ") does not match num_packets * packet_size (" + std::to_string(num_rows) + "*" +
-	//                                   std::to_string(param.get_size()) + ") for index " + std::to_string(param.get_index()));
-	//     }
-	//      if (param.get_size() == 0 && num_rows > 0) { // Check only if we expect rows
-	//           throw std::runtime_error("Parameter index " + std::to_string(param.get_index()) + " has packets but reports zero packet size.");
-	//      }
-	// }
-
-	// // --- 3. Initialize Builders and Schema Fields ---
-	// std::vector<std::shared_ptr<arrow::Field>> fields;
-	// std::vector<std::shared_ptr<arrow::Array>> arrays; // Store finalized arrays
-	// fields.reserve(2 + parameters.size());
-	// arrays.reserve(2 + parameters.size());
-
-	// // --- 4. Build Sequence ID Column ---
-	// // Choose Arrow type (e.g., uint64, uint32) - MUST match std::vector type
-	// auto seq_id_type = arrow::uint16();
-	// fields.push_back(arrow::field("sequence_id", seq_id_type));
-	// arrow::UInt16Builder seq_id_builder(pool);
-	// ARROW_THROW_NOT_OK(seq_id_builder.Reserve(num_rows));
-	// ARROW_THROW_NOT_OK(seq_id_builder.AppendValues(sequence_ids_.data(), num_rows));
-	// std::shared_ptr<arrow::Array> seq_id_array;
-	// ARROW_ASSIGN_OR_THROW(seq_id_array, seq_id_builder.Finish());
-	// arrays.push_back(seq_id_array);
-
-	// // --- 5. Build Timestamp Column ---
-	// // Choose Arrow type (e.g., uint64, or timestamp[unit]) - MUST match std::vector type
-	// // If using arrow::timestamp, the builder expects int64_t*. Cast needed if vector is uint64_t.
-	// // Using uint64 is often simpler unless you need Arrow's time semantics immediately.
-	// auto ts_type = arrow::uint32(); // Or arrow::timestamp(arrow::TimeUnit::NANOSECOND) etc.
-	// fields.push_back(arrow::field("timestamp", ts_type));
-	// arrow::UInt32Builder ts_builder(pool); // Use matching builder type
-	// ARROW_THROW_NOT_OK(ts_builder.Reserve(num_rows));
-	// ARROW_THROW_NOT_OK(ts_builder.AppendValues(timestamps_.data(), num_rows)); // Assumes timestamps_ is vector<uint64_t>
-	// std::shared_ptr<arrow::Array> ts_array;
-	// ARROW_ASSIGN_OR_THROW(ts_array, ts_builder.Finish());
-	// arrays.push_back(ts_array);
-
-	// // --- 6. Build Parameter Columns ---
-	// std::vector<std::unique_ptr<arrow::FixedSizeBinaryBuilder>> param_builders;
-	// param_builders.reserve(parameters.size());
-
-	// for (const auto& param : parameters) {
-	//     int32_t packet_size = static_cast<int32_t>(param.get_size());
-	//      // Size check already done, but belt-and-suspenders doesn't hurt
-	//      if (packet_size <= 0) {
-	//          throw std::runtime_error("Parameter index " + std::to_string(param.get_index()) + " has invalid packet size: " + std::to_string(packet_size));
-	//      }
-
-	// auto field_type = arrow::fixed_size_binary(packet_size);
-	// fields.push_back(arrow::field(std::to_string(param.get_index()), field_type));
-
-	// param_builders.emplace_back(std::make_unique<arrow::FixedSizeBinaryBuilder>(field_type, pool));
-	// ARROW_THROW_NOT_OK(param_builders.back()->Reserve(num_rows));
-	//}
-
-	// // Populate Parameter Builders (row by row conceptually, but builder appends efficiently)
-	// for (size_t j = 0; j < parameters.size(); ++j) {
-	//      const auto& param = parameters[j];
-	//      auto& builder = *param_builders[j];
-	//      const std::vector<uint8_t>& buffer = param.get_packets_buffer();
-	//      int32_t packet_size = static_cast<int32_t>(param.get_size()); // Already checked > 0
-
-	// // Check buffer size again just before access
-	// if(buffer.size() != static_cast<size_t>(num_rows) * packet_size) {
-	//     throw std::runtime_error("Buffer size mismatch just before appending for param index " + std::to_string(param.get_index()));
-	// }
-
-	// // Append all values at once using AppendValues for efficiency
-	// // Need pointer to start of buffer and number of items (num_rows)
-	//  ARROW_THROW_NOT_OK(builder.AppendValues(buffer.data(), num_rows));
-
-	// // // Alternatively, append one by one (less efficient for large N)
-	// // for (int64_t i = 0; i < num_rows; ++i) {
-	// //     const uint8_t* packet_ptr = buffer.data() + (static_cast<size_t>(i) * packet_size);
-	// //     ARROW_THROW_NOT_OK(builder.Append(packet_ptr));
-	// // }
-	//}
-
-	// // Finalize Parameter Arrays
-	// for (auto& builder_ptr : param_builders) {
-	//     std::shared_ptr<arrow::Array> param_array;
-	//     ARROW_ASSIGN_OR_THROW(param_array, builder_ptr->Finish());
-	//     arrays.push_back(param_array);
-	// }
-
-	// // --- 7. Create Schema and Table ---
-	// auto schema = arrow::schema(fields);
-	// auto table = arrow::Table::Make(schema, arrays, num_rows);
-
-	// // --- 8. Clear Source Data (Flush) ---
-	// sequence_ids_.clear();
-	// timestamps_.clear();
-	// for (auto& param : parameters) {
-	//     param.clear_data();
-	// }
-	// // parameters_.clear(); // Only clear this if the ParameterSet definition itself is flushed
-
-	// return table;
-	throw std::runtime_error("flush_to_arrow_table not implemented yet.");
+	return table;
 }
 
 // --- Nanobind Module Definition ---

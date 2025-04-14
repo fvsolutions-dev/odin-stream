@@ -1,6 +1,7 @@
 #pragma once
 #include <stdlib.h>
 #include <nanobind/nanobind.h>
+#include <arrow/type.h>
 
 enum class PrimitiveType { INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64, FLOAT32, FLOAT64, BOOL };
 
@@ -15,6 +16,7 @@ class TypeDescriptor {
         return "TypeDescriptor()";  // Placeholder, replace with actual representation
     }
 
+
 };
 
 class PrimitiveTypeDescriptor : public TypeDescriptor {
@@ -25,7 +27,22 @@ class PrimitiveTypeDescriptor : public TypeDescriptor {
    public:
 	PrimitiveTypeDescriptor(PrimitiveType t);
 	PrimitiveType get_primitive_type() const { return type; }
-
+    
+    std::shared_ptr<arrow::DataType> get_arrow_type() const {
+        switch (type) {
+            case PrimitiveType::INT8: return arrow::int8();
+            case PrimitiveType::UINT8: return arrow::uint8();
+            case PrimitiveType::INT16: return arrow::int16();
+            case PrimitiveType::UINT16: return arrow::uint16();
+            case PrimitiveType::INT32: return arrow::int32();
+            case PrimitiveType::UINT32: return arrow::uint32();
+            case PrimitiveType::FLOAT32: return arrow::float32();
+            case PrimitiveType::INT64: return arrow::int64();
+            case PrimitiveType::UINT64: return arrow::uint64();
+            case PrimitiveType::FLOAT64: return arrow::float64();
+            default: throw std::runtime_error("Unknown primitive type in C++.");
+        }
+    }
 	size_t get_size() const override { return size; }
 
     std::string repr() const override {

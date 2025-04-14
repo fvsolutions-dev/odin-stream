@@ -144,5 +144,8 @@ nanobind_add_stub(
 target_include_directories(odin_stream PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(odin_stream PRIVATE nanobind_pyarrow::nanobind_pyarrow nanobind_pyarrow::pyarrow)
 
+# Add O3
+target_compile_options(odin_stream PRIVATE -O3)
+
 # Install directive for scikit-build-core
 install(TARGETS odin_stream LIBRARY DESTINATION ".")

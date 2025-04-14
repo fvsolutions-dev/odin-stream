@@ -1,7 +1,7 @@
 import pyarrow
 import odin_stream 
 from odin_stream import PrimitiveTypeDescriptor, PrimitiveType, StructDescriptor,TypeDescriptors
-
+import polars as pl
 with open("test/dataset.hex", "r") as f:
     data = f.read()
     # split newline
@@ -24,10 +24,21 @@ vec7_descriptor.add_member("gyro_z", PrimitiveTypeDescriptor(odin_stream.FLOAT32
 vec7_descriptor.add_member("temperature", PrimitiveTypeDescriptor(odin_stream.FLOAT32))
 
 print(type(vec7_descriptor))
-types = TypeDescriptors({10005: vec7_descriptor,510: vec7_descriptor})
+types = TypeDescriptors({0xE0C00000: vec7_descriptor,0xE0B10000: vec7_descriptor, 0xE0B20000: vec7_descriptor, 0xE0B30000: vec7_descriptor, 0xE0B40000: vec7_descriptor})
 
 
 processor = odin_stream.StreamProcessor(types)
+import time
+start = time.time()
 processor.process_bytes_list(data)
 
-print(processor)
+
+
+sert = (processor.get_parameter_set(6684))
+# print(sert.flush_to_arrow_table())
+data = pl.from_arrow(sert.flush_to_arrow_table())
+# to csv
+data.write_csv("test/dataset.csv")
+
+end = time.time()
+print(f"Execution time: {end - start} s")

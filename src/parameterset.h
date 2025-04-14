@@ -11,7 +11,7 @@
 class ParameterSet {
    private:
 	std::shared_ptr<TypeDescriptors> type_descriptors;  // Pointer to type descriptors
-	std::vector<FixedSizeParameter> parameters;             // Vector of parameters
+	std::vector<std::shared_ptr<FixedSizeParameter>> parameters;             // Vector of parameters
 	uint16_t parameter_set_identifier;                      // Identifier of the parameter set
 	uint32_t definition_identifier;                         // Identifier for the definition of the parameter set
 	uint32_t data_size = 0;                                     // Expected size of the data
@@ -20,7 +20,7 @@ class ParameterSet {
 	ParameterSet(uint16_t identifier, uint32_t definition_identifier, std::shared_ptr<TypeDescriptors> type_descriptors);
 	~ParameterSet();
 
-	void add(FixedSizeParameter param);
+	void add(std::shared_ptr<FixedSizeParameter> param);
 
 	uint16_t get_hash() const { return parameter_set_identifier; }
 
