@@ -1,6 +1,6 @@
 // FixedSizeParameter.cpp
 
-#include "fixed_size_parameter.hpp"  // Include the header file declaring the class
+#include "fixed_size_parameter.h"  // Include the header file declaring the class
 
 #include <arrow/api.h>          // Include main Arrow header (includes builders, types, etc.)
 #include <arrow/memory_pool.h>  // Specifically for default_memory_pool
@@ -18,8 +18,6 @@
 
 namespace nb = nanobind;
 
-// Constructor Implementation
-FixedSizeParameter::FixedSizeParameter(uint32_t idx, uint16_t size) : index(idx), size(size) {}
 
 // get_index() Implementation
 uint32_t FixedSizeParameter::get_index() const { return index; }
@@ -48,7 +46,8 @@ void init_fixed_size_parameter(nb::module_& m) {
 
 	// Bind the FixedSizeParameter class to Python
 	nb::class_<FixedSizeParameter>(m, "FixedSizeParameter")
-		.def(nb::init<uint32_t, uint16_t>(), "index"_a, "size"_a, "Create a new FixedSizeParameter with the given index and size.")
+		.def(nb::init<uint32_t, uint16_t, std::shared_ptr<TypeDescriptor>>(), "index"_a, "size"_a, "type_descriptor"_a,
+		     "Create a new FixedSizeParameter with the given index, size, and type descriptor.")
 		.def("get_index", &FixedSizeParameter::get_index, "Get the index of the parameter.")
 		.def("set_index", &FixedSizeParameter::set_index, "Set the index of the parameter.")
 

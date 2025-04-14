@@ -126,6 +126,10 @@ nanobind_add_module(
   src/fixed_size_parameter.cpp
   src/parameterset.cpp
   src/python_bindings.cpp
+  src/types/primitive.cpp
+  src/types/struct.cpp
+  src/stream_processor.cpp
+  src/types/typedescriptors.cpp
   )
 
 nanobind_add_stub(

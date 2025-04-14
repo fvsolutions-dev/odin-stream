@@ -63,6 +63,7 @@ void stream_decoding_manager_parse_packet(decoding_manager_t           *manager,
             return;
         }
 
+
         manager->statistics.received_events_packets++;
         // Call the event callback if set
         if (manager->event_callback != NULL)
