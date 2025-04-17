@@ -13,7 +13,7 @@ if(DEFINED ENV{IDF_PATH})
 endif()
 
 # If Zephyr is reading this CMakeLists.txt, register it as a Zephyr module
-if(DEFINED ENV{ZEPHYR_BASE})
+if(Zephyr_FOUND)
   zephyr_library_named(odin-stream)
   zephyr_library_sources(
     "src/odin_stream/stream_packet.c"
