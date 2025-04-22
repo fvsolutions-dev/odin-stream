@@ -1,6 +1,6 @@
 [project]
 name = "odin-stream"
-version = "0.1.0"
+version = "0.1.2"
 description = "A libary to create datastreams of ODIN objects"
 requires-python = ">=3.10,<4.0"
 authors = [{ name = "Floris vernieuwe", email = "floris@vernieuwe.eu" }]

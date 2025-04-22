@@ -67,6 +67,16 @@ std::shared_ptr<ParameterSet> StreamProcessor::get_parameter_set(uint16_t identi
 	}
 }
 
+std::vector<uint16_t> StreamProcessor::get_parameter_set_identifiers() const {
+	std::vector<uint16_t> identifiers;
+	identifiers.reserve(parameter_sets_map.size());
+	for (const auto& pair : parameter_sets_map) {
+		identifiers.push_back(pair.first);
+	}
+	return identifiers;
+}
+
+
 void init_stream_processor(nb::module_& m) {
 	using namespace nb::literals;
 
@@ -75,5 +85,6 @@ void init_stream_processor(nb::module_& m) {
 		.def("process_bytes_list", &StreamProcessor::process_bytes_list, "bytes_list"_a, "Process a list of bytes.")
 		.def("get_parameter_set_count", &StreamProcessor::get_parameter_set_count, "Get the number of stored ParameterSets.")
 		.def("get_parameter_set", &StreamProcessor::get_parameter_set, "identifier"_a, "Get a ParameterSet by its identifier.")
-		.def("clear_parameter_sets", &StreamProcessor::clear_parameter_sets, "Clear all stored ParameterSets.");
+		.def("clear_parameter_sets", &StreamProcessor::clear_parameter_sets, "Clear all stored ParameterSets.")
+		.def("get_parameter_set_identifiers", &StreamProcessor::get_parameter_set_identifiers, "Get a list of all stored ParameterSet identifiers.");
 }

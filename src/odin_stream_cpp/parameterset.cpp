@@ -148,10 +148,12 @@ void ParameterSet::parse_data_packet(nb::bytes data) {
 std::shared_ptr<arrow::Table> ParameterSet::flush_to_arrow_table() {
 	std::vector<std::shared_ptr<arrow::Field>> fields;
 	std::vector<std::shared_ptr<arrow::Array>> arrays;
+	
 	uint32_t datapoints = 0;
 	for (const auto& param : parameters) {
-		std::vector<std::pair<std::shared_ptr<arrow::Array>, std::shared_ptr<arrow::Field>>> data = param->finish();
 		datapoints = param->get_datapoints();
+
+		std::vector<std::pair<std::shared_ptr<arrow::Array>, std::shared_ptr<arrow::Field>>> data = param->finish();
 
 		for (const auto& [array, field] : data) {
 			fields.push_back(field);

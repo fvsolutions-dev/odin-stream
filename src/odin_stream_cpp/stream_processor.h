@@ -8,9 +8,9 @@
 #include <nanobind_pyarrow/pyarrow_import.h>
 #include <nanobind_pyarrow/table.h>
 
-#include "parameterset.h"
 #include "descriptor/parameter_descriptor.h"
 #include "descriptor/type_descriptor.h"
+#include "parameterset.h"
 
 class StreamProcessor {
    private:
@@ -19,11 +19,13 @@ class StreamProcessor {
 
    public:
 	StreamProcessor(std::shared_ptr<ParameterMapDescriptor> parameter_map);
-    
+
 	void process_bytes_list(nanobind::list bytes_list);
 
 	size_t get_parameter_set_count() const;
 	std::shared_ptr<ParameterSet> get_parameter_set(uint16_t identifier);
+	std::vector<uint16_t> get_parameter_set_identifiers() const;
+
 	void clear_parameter_sets();
 };
 

@@ -128,6 +128,7 @@ nanobind_add_module(
   src/odin_stream_cpp/fixed_size_parameter.cpp
   src/odin_stream_cpp/parameterset.cpp
   src/odin_stream_cpp/stream_processor.cpp
+  src/odin_stream_cpp/builder.cpp
   src/odin_stream_cpp/descriptor/parameter_descriptor.cpp
   src/odin_stream_cpp/descriptor/type_descriptor.cpp
   )

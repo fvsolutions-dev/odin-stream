@@ -16,7 +16,6 @@ class StreamProcessor:
             param = parameter_to_odin_param(parameter, self.type_dict)
             self.parameter_map.add_parameter(param)
             
-        print(self.parameter_map)
 
         self.processor = odin_stream_cpp.StreamProcessor(self.parameter_map)
 
@@ -24,10 +23,10 @@ class StreamProcessor:
         """
         Process a list of bytes and add them to the processor.
         """
-        
         self.processor.process_bytes_list(data)
-        set = self.processor.get_parameter_set(6684)
 
-         
-        return pl.from_arrow(set.flush_to_arrow_table())
-   
+    def flush(self) -> dict[int, odin_stream_cpp.ParameterSet]:
+        sets = {}
+        for key in self.processor.get_parameter_set_identifiers():
+            sets[key] = pl.from_arrow(self.processor.get_parameter_set(key).flush_to_arrow_table())
+        return sets   
