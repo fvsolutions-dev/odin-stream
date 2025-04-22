@@ -1,4 +1,4 @@
-from odin_stream import FixedSizeParameter,ParameterSet
+from odin_stream_cpp import FixedSizeParameter,ParameterSet
 
 
 parameters = [

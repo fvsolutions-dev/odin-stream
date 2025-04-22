@@ -5,7 +5,6 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind_pyarrow/table.h>
-#include "./types/typedescriptors.h"
 
 // Arrow headers
 #include <arrow/api.h>
@@ -24,7 +23,8 @@
 #include <optional>
 #include <string>
 
-#include "./types/struct.h"
+#include "descriptor/parameter_descriptor.h"
+#include "descriptor/type_descriptor.h"
 
 #define ARROW_THROW_NOT_OK(status)                                     \
 	do {                                                               \
@@ -42,6 +42,7 @@ class GenericBuilder {
 	virtual void add_data(const uint8_t* data, size_t size) = 0;
 	// virtual size_t get_size() const = 0;
 	virtual uint32_t get_datapoints() const = 0;
+	virtual std::vector<std::pair<std::shared_ptr<arrow::Array>, std::shared_ptr<arrow::Field>>> finish() = 0;
 };
 
 class PrimitiveBuilder : public GenericBuilder {
@@ -129,6 +130,11 @@ class PrimitiveBuilder : public GenericBuilder {
 		ARROW_THROW_NOT_OK(st);  // Throw if any error occurred during append
 		datapoints++;
 	}
+	std::vector<std::pair<std::shared_ptr<arrow::Array>, std::shared_ptr<arrow::Field>>> finish() {
+		std::shared_ptr<arrow::Array> array;
+		ARROW_THROW_NOT_OK(builder->Finish(&array));
+		return {{array, arrow_field}};
+	}
 
 	std::shared_ptr<arrow::DataType> get_arrow_type() const { return arrow_type; }
 	std::shared_ptr<arrow::Field> get_arrow_field() const { return arrow_field; }
@@ -144,7 +150,7 @@ class CompositeBuilder : public GenericBuilder {
 	uint32_t datapoints = 0;
 
    public:
-	CompositeBuilder(std::string name, std::shared_ptr<StructDescriptor> struct_descriptor) : name(name) {
+	CompositeBuilder(std::string name, std::shared_ptr<CompositeTypeDescriptor> struct_descriptor) : name(name) {
 		// Create the appropriate builders for each field in the struct
 		for (const auto& field : struct_descriptor->members) {
 			auto field_name = field.first;
@@ -154,7 +160,7 @@ class CompositeBuilder : public GenericBuilder {
 				std::string merged_name = name + "_" + field_name;
 				builders.push_back(std::make_shared<PrimitiveBuilder>(merged_name, primitive_shared_desc));
 
-			} else if (auto struct_desc = dynamic_cast<StructDescriptor*>(field_descriptor.get())) {
+			} else if (auto struct_desc = dynamic_cast<CompositeTypeDescriptor*>(field_descriptor.get())) {
 				throw std::runtime_error("Nested structs are not supported in CompositeBuilder.");
 
 			} else {
@@ -173,6 +179,17 @@ class CompositeBuilder : public GenericBuilder {
 		datapoints++;
 	}
 	uint32_t get_datapoints() const { return datapoints; }
+
+	std::vector<std::pair<std::shared_ptr<arrow::Array>, std::shared_ptr<arrow::Field>>> finish() {
+		std::vector<std::pair<std::shared_ptr<arrow::Array>, std::shared_ptr<arrow::Field>>> result;
+		for (const auto& field_builder : builders) {
+			std::shared_ptr<arrow::Array> array;
+			ARROW_THROW_NOT_OK(field_builder->builder->Finish(&array));
+			result.push_back({array, field_builder->get_arrow_field()});
+		}
+		return result;
+	}
+
 };
 
 class FixedSizeParameter {
@@ -180,20 +197,20 @@ class FixedSizeParameter {
 	uint32_t index;
 	uint16_t size;
 
-	std::shared_ptr<TypeDescriptor> type_descriptor;
+	std::shared_ptr<ParameterDescriptor> parameter;
 	std::shared_ptr<GenericBuilder> builder;
 
    public:
-	FixedSizeParameter(uint32_t idx, uint16_t data_size, std::shared_ptr<TypeDescriptor> type_descriptor)
-		: index(idx), size(data_size), type_descriptor(type_descriptor) {
+	FixedSizeParameter(uint32_t idx, uint16_t data_size, std::shared_ptr<ParameterDescriptor> parameter) : index(idx), size(data_size), parameter(parameter) {
 		if (size == 0) {
 			throw std::invalid_argument("Size must be greater than 0.");
 		}
+		auto type_descriptor = parameter->get_type_descriptor();
 
 		if (auto primitive_shared_desc = std::dynamic_pointer_cast<PrimitiveTypeDescriptor>(type_descriptor)) {
 			builder = std::make_shared<PrimitiveBuilder>(std::to_string(index), primitive_shared_desc);
 
-		} else if (auto struct_shared_desc = std::dynamic_pointer_cast<StructDescriptor>(type_descriptor)) {
+		} else if (auto struct_shared_desc = std::dynamic_pointer_cast<CompositeTypeDescriptor>(type_descriptor)) {
 			builder = std::make_shared<CompositeBuilder>(std::to_string(index), struct_shared_desc);
 
 		} else {
@@ -214,31 +231,13 @@ class FixedSizeParameter {
 		builder->add_data(data, size);
 	}
 
-	uint32_t get_index() const;
-	void set_index(uint32_t new_index);
-
-	// add data method, to use with Arrow's builder
+	uint32_t get_index() const { return index; }
 	uint16_t get_size() const { return size; }
-
-	// --- Other Methods ---
+	std::shared_ptr<ParameterDescriptor> get_parameter() const { return parameter; }
 	std::string repr() const { return "FixedSizeParameter()"; }
 
 	std::vector<std::pair<std::shared_ptr<arrow::Array>, std::shared_ptr<arrow::Field>>> finish() {
-		if (PrimitiveBuilder* primitive_builder = dynamic_cast<PrimitiveBuilder*>(builder.get())) {
-			std::shared_ptr<arrow::Array> array;
-			ARROW_THROW_NOT_OK(primitive_builder->builder->Finish(&array));
-			return {{array, primitive_builder->get_arrow_field()}};
-		} else if (CompositeBuilder* composite_builder = dynamic_cast<CompositeBuilder*>(builder.get())) {
-			std::vector<std::pair<std::shared_ptr<arrow::Array>, std::shared_ptr<arrow::Field>>> result;
-			for (const auto& field_builder : composite_builder->builders) {
-				std::shared_ptr<arrow::Array> array;
-				ARROW_THROW_NOT_OK(field_builder->builder->Finish(&array));
-				result.push_back({array, field_builder->get_arrow_field()});
-			}
-			return result;
-		} else {
-			throw std::runtime_error("Unsupported builder type in FixedSizeParameter::finish.");
-		}
+		return builder->finish();
 	}
 
 	uint32_t get_datapoints() const { return builder->get_datapoints(); }

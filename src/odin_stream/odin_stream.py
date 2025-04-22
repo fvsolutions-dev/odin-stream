@@ -1,4 +1,4 @@
-import odin_stream 
+import odin_stream_cpp 
 import polars as pl
 import odin_stream_cpp
 from odin_db import OdinDBModel, OdinDBParameterGroupModel,OdinDBParameterModel,OdinDBTypeDefinitionModel,ODINDBModelType
@@ -10,7 +10,7 @@ class StreamProcessor:
         self.type_dict = get_type_dict(odin_db)
 
         parameter_map = odin_stream_cpp.ParameterMapDescriptor()
-        
+
         for parameter in odin_db_to_flat_list(odin_db.root):
             param = parameter_to_odin_param(parameter, self.type_dict)
             parameter_map.add_parameter(param)

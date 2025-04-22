@@ -1,5 +1,5 @@
 import pyarrow
-import odin_stream
+import odin_stream_cpp
 import polars as pl
 import time
 
@@ -13,7 +13,7 @@ with open("test/dataset.hex", "r") as f:
 
 start = time.time()
     # result = pl.from_arrow(odin_stream.test_create())
-processor = odin_stream.StreamProcessor()
+processor = odin_stream_cpp.StreamProcessor()
 processor.process_bytes_list(data)
 
 data1 = pl.from_arrow(processor.get_parameter_set(25762).flush_to_arrow_table())

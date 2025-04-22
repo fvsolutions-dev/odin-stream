@@ -118,7 +118,7 @@ nanobind_add_module(
   # replace this flag by NB_SHARED to conserve space by
   # reusing a shared libnanobind across libraries
   NB_STATIC
-  src/odin_stream/python_bindings.cpp
+  src/odin_stream_cpp/python_bindings.cpp
 
 
   # Source code goes here
@@ -126,15 +126,12 @@ nanobind_add_module(
   src/embedded_odin_stream/stream_parameter_set.c
   
   # src/enums.cpp
-  # src/odin_stream/fixed_size_parameter.cpp
-  # src/odin_stream/parameterset.cpp
-  # src/odin_stream/types/primitive.cpp
-  # src/odin_stream/types/struct.cpp
-  # src/odin_stream/stream_processor.cpp
-  # src/odin_stream/types/typedescriptors.cpp
-
-  src/odin_stream/descriptor/parameter_descriptor.cpp
-  src/odin_stream/descriptor/type_descriptor.cpp
+  src/odin_stream_cpp/fixed_size_parameter.cpp
+  # src/odin_stream_cpp/parameterset.cpp
+  # src/odin_stream_cpp/stream_processor.cpp
+  # src/odin_stream_cpp/types/typedescriptors.cpp
+  src/odin_stream_cpp/descriptor/parameter_descriptor.cpp
+  src/odin_stream_cpp/descriptor/type_descriptor.cpp
   )
 
 nanobind_add_stub(
