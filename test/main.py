@@ -8,11 +8,11 @@ with open(ODIN_PATH, "rb") as f:
 processor = StreamProcessor(odin_db)
 
 
-with open("test/dataset.hex", "r") as f:
-    data = f.read()
-    data = data.split("\n")
-    data = [bytes.fromhex(i) for i in data]
+# with open("test/dataset.hex", "r") as f:
+#     data = f.read()
+#     data = data.split("\n")
+#     data = [bytes.fromhex(i) for i in data]
 
 
-processor.process_bytes_list(data)
+# processor.process_bytes_list(data)
 

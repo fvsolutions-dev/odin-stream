@@ -3,7 +3,7 @@
 #include "./struct.h"
 namespace nb = nanobind;
 
-TypeDescriptors::TypeDescriptors(nanobind::dict type_descriptors) {
+ParameterDefinition::ParameterDefinition(nanobind::dict type_descriptors) {
 	for (const auto& item : type_descriptors) {
 		uint32_t key = nanobind::cast<uint32_t>(item.first);
 
@@ -18,7 +18,8 @@ TypeDescriptors::TypeDescriptors(nanobind::dict type_descriptors) {
 		}
 	}
 }
-std::optional<std::shared_ptr<TypeDescriptor>> TypeDescriptors::get_type_descriptor(uint32_t key) {
+
+std::optional<std::shared_ptr<TypeDescriptor>> ParameterDefinition::find_by_id(uint32_t key) {
 	auto it = type_descriptors_map.find(key);
 	if (it != type_descriptors_map.end()) {
 		return it->second;
@@ -30,7 +31,7 @@ std::optional<std::shared_ptr<TypeDescriptor>> TypeDescriptors::get_type_descrip
 void init_type_desciptors(nb::module_& m) {
 	using namespace nb::literals;
 
-	nb::class_<TypeDescriptors>(m, "TypeDescriptors")
-		.def(nb::init<nb::dict>(), "type_descriptors"_a, "Constructor for the TypeDescriptors. Initializes with type descriptors.")
-		.def("get_type_descriptor", &TypeDescriptors::get_type_descriptor, "key"_a, "Get a TypeDescriptor by its key.");
+	nb::class_<ParameterDefinition>(m, "ParameterDefinition")
+		.def(nb::init<nb::dict>(), "type_descriptors"_a, "Constructor for the ParameterDefinition. Initializes with type descriptors.")
+		.def("find_by_id", &ParameterDefinition::find_by_id, "key"_a, "Get a TypeDescriptor by its key.");
 }

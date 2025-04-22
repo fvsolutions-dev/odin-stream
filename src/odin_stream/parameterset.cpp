@@ -32,28 +32,6 @@ extern "C" {
 }
 
 namespace nb = nanobind;
-// class ParameterSet {
-// 	private:
-// 	 std::unordered_map<uint16_t, FixedSizeParameter> parameters;  // Map of parameters by index
-// 	 uint16_t parameter_set_identifier;                            // Identifier of the parameter set
-// 	 uint32_t definition_identifier;                            // Identifier for the definition of the parameter set
-// 	public:
-// 	 ParameterSet(uint16_t identifier,uint32_t definition_identifier);
-// 	 ~ParameterSet();
-
-// 	 ParameterSet(const ParameterSet&) = delete;
-// 	 ParameterSet& operator=(const ParameterSet&) = delete;
-
-// 	 ParameterSet(ParameterSet&& other) noexcept;
-// 	 ParameterSet& operator=(ParameterSet&& other) noexcept;
-
-// 	 void add(const FixedSizeParameter& param);
-
-// 	 static ParameterSet from_identifier_data(nanobind::bytes data);
-// 	 void parse_data_packet(nanobind::bytes data) const;
-
-// 	 std::string repr() const;
-//  };
 
 // Use arrow's status checking macros for cleaner error handling
 #define ARROW_THROW_NOT_OK(status)                                     \
@@ -71,7 +49,7 @@ namespace nb = nanobind;
 
 #define ARROW_ASSIGN_OR_THROW(lhs, rexpr) ARROW_ASSIGN_OR_THROW_IMPL(ARROW_ASSIGN_OR_RAISE_NAME(_error_or_value, __COUNTER__), lhs, rexpr)
 
-ParameterSet::ParameterSet(uint16_t identifier, uint32_t definition_identifier, std::shared_ptr<TypeDescriptors> type_descriptors)
+ParameterSet::ParameterSet(uint16_t identifier, uint32_t definition_identifier, std::shared_ptr<ParameterDefinition> type_descriptors)
 	: parameter_set_identifier(identifier), definition_identifier(definition_identifier), type_descriptors(type_descriptors) {}
 
 ParameterSet::~ParameterSet() {
@@ -84,7 +62,7 @@ void ParameterSet::add(std::shared_ptr<FixedSizeParameter> param) {
 	data_size += param->get_size();  // Update the total data size
 }
 
-std::shared_ptr<ParameterSet> ParameterSet::from_identifier_data(nanobind::bytes data, std::shared_ptr<TypeDescriptors> type_descriptors) {
+std::shared_ptr<ParameterSet> ParameterSet::from_identifier_data(nanobind::bytes data, std::shared_ptr<ParameterDefinition> type_descriptors) {
 	stream_parameter_set_t* new_pset_ptr = stream_packet_parse_identifier((const uint8_t*)data.c_str(), data.size());
 
 	if (!new_pset_ptr) {
@@ -97,7 +75,7 @@ std::shared_ptr<ParameterSet> ParameterSet::from_identifier_data(nanobind::bytes
 	for (size_t i = 0; i < new_pset_ptr->parameter_count; ++i) {
 		const stream_fixed_size_parameter_t& c_param = new_pset_ptr->parameters[i];
 
-        std::optional<std::shared_ptr<TypeDescriptor>> type = type_descriptors->get_type_descriptor(c_param.index);
+        std::optional<std::shared_ptr<TypeDescriptor>> type = type_descriptors->find_by_id(c_param.index);
 
         if (!type) {
             printf("Warning: Type descriptor not found for index %u. Skipping parameter.\n", c_param.index);
@@ -209,43 +187,11 @@ void init_parameterset(nb::module_& m) {
 
 	// --- Bind ParameterSet Wrapper ---
 	nb::class_<ParameterSet>(m, "ParameterSet", "Manages a set of streaming parameters")
-		.def(nb::init<uint16_t, uint32_t, std::shared_ptr<TypeDescriptors>>(), "identifier"_a, "definition_identifier"_a, "type_descriptors"_a,
+		.def(nb::init<uint16_t, uint32_t, std::shared_ptr<ParameterDefinition>>(), "identifier"_a, "definition_identifier"_a, "type_descriptors"_a,
 	         "Create a new ParameterSet with the given identifier and type descriptors.")
 		// .def("add", &ParameterSet::add, "param"_a, nb::rv_policy::reference_internal, "Add a FixedSizeParameter to the set.")
 		.def_static("from_identifier_data", &ParameterSet::from_identifier_data, "data"_a, "type_descriptors"_a,
 	                "Create a new ParameterSet from identifier data.")
 		.def("flush_to_arrow_table", &ParameterSet::flush_to_arrow_table, "Creates an Arrow table from the data in the parameters and clears them.");
 
-	//OLD
-	// .def(nb::init<size_t>(), "max_parameters"_a, "Create a new, empty parameter set with a maximum capacity.")
-	// // Methods (throwing exceptions on C API errors)
-	// .def("add", &ParameterSet::add, "parameter"_a, nb::rv_policy::reference_internal,  // param must outlive set
-	//      "Add a parameter descriptor (FixedSizeParameter) to the set.")
-	// .def("add_list", &ParameterSet::add_list, "parameters"_a, "Add multiple parameter descriptors from a Python iterable.")
-	// .def("remove_by_index", &ParameterSet::remove_by_index, "index"_a, "Remove a parameter from the set by its index.")
-	// // .def("clear", &ParameterSet::clear, "Remove all parameters from the set.")
-	// // .def("recalculate_hash", &ParameterSet::recalculate_hash, "Force recalculation of the internal parameter hash (usually not needed).")
-	// // Packet Generation
-	// .def("generate_identifier_packet", &ParameterSet::generate_identifier_packet, "Generate the identifier packet for this set as bytes.")
-	// .def("generate_data_packet", &ParameterSet::generate_data_packet, "timestamp"_a,
-	//      "Generate the data packet for this set as bytes, including a timestamp.")
-	// // Properties (read-only)
-	// .def_prop_ro("count", &ParameterSet::get_count, "Current number of parameters.")
-	// .def_prop_ro("max_count", &ParameterSet::get_max_count, "Maximum capacity.")
-	// .def_prop_ro("hash", &ParameterSet::get_hash, "Current parameter index hash (CRC16).")
-	// .def_prop_ro("indices", &ParameterSet::get_indices, "List of indices currently in the set.")
-	// // Special methods
-	// .def("__len__", &ParameterSet::get_count)
-	// .def("__repr__", &ParameterSet::repr)
-
-	// // --- Bind NEW Data Parsing Method ---
-	// .def("parse_data_packet", &ParameterSet::parse_data_packet, "data"_a,
-	//      "Parses a data packet (bytes), verifies against the set definition,\n"
-	//      "and returns a list of bytes objects containing the data for each parameter.")
-
-	// Class method for parsing
-	// Note: nb::classmethod requires C++17. Need static method binding otherwise.
-	// Using static method binding here for broader compatibility.
-	// .def_static("parse_identifier_packet", &ParameterSet::parse_identifier_packet, "data"_a,
-	//             "Parse an identifier packet (bytes) and create a new ParameterSet instance.");
 }

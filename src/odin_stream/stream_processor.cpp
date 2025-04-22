@@ -6,7 +6,7 @@ extern "C" {
 
 namespace nb = nanobind;
 
-StreamProcessor::StreamProcessor(std::shared_ptr<TypeDescriptors> type_descriptors) : type_descriptors_map(type_descriptors) {}
+StreamProcessor::StreamProcessor(std::shared_ptr<ParameterDefinition> type_descriptors) : type_descriptors_map(type_descriptors) {}
 
 void StreamProcessor::process_bytes_list(nb::list bytes_list) {
 	for (const auto& handle : bytes_list) {
@@ -71,7 +71,7 @@ void init_stream_processor(nb::module_& m) {
 	using namespace nb::literals;
 
 	nb::class_<StreamProcessor>(m, "StreamProcessor")
-		.def(nb::init<std::shared_ptr<TypeDescriptors>>(), "type_descriptors"_a, "Constructor for the StreamProcessor. Initializes with type descriptors.")
+		.def(nb::init<std::shared_ptr<ParameterDefinition>>(), "type_descriptors"_a, "Constructor for the StreamProcessor. Initializes with type descriptors.")
 		.def("process_bytes_list", &StreamProcessor::process_bytes_list, "bytes_list"_a, "Process a list of bytes.")
 		.def("get_parameter_set_count", &StreamProcessor::get_parameter_set_count, "Get the number of stored ParameterSets.")
 		.def("get_parameter_set", &StreamProcessor::get_parameter_set, "identifier"_a, "Get a ParameterSet by its identifier.")

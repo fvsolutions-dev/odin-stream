@@ -10,13 +10,13 @@
 #include "./primitive.h"
 #include <optional>
 
-class TypeDescriptors {
+class ParameterDefinition {
    private:
 	std::unordered_map<uint32_t, std::shared_ptr<TypeDescriptor>> type_descriptors_map;
 
    public:
-	TypeDescriptors(nanobind::dict type_descriptors);
-    std::optional<std::shared_ptr<TypeDescriptor>> get_type_descriptor(uint32_t key);
+	ParameterDefinition(nanobind::dict type_descriptors);
+    std::optional<std::shared_ptr<TypeDescriptor>> find_by_id(uint32_t key);
 
 };
 

@@ -17,10 +17,10 @@
 class StreamProcessor {
    private:
 	std::unordered_map<uint16_t, std::shared_ptr<ParameterSet>> parameter_sets_map;
-	std::shared_ptr<TypeDescriptors> type_descriptors_map;
+	std::shared_ptr<ParameterDefinition> type_descriptors_map;
 
    public:
-	StreamProcessor(std::shared_ptr<TypeDescriptors> type_descriptors);
+	StreamProcessor(std::shared_ptr<ParameterDefinition> type_descriptors);
     
 	void process_bytes_list(nanobind::list bytes_list);
 

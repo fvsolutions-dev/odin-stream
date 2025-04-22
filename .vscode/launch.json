@@ -29,10 +29,10 @@
       "processId": "",
     },
     {
-      "name": "Python: Current File",
+      "name": "Python: Main",
       "type": "debugpy",
       "request": "launch",
-      "program": "test/test_types.py",
+      "program": "test/main.py",
       "console": "integratedTerminal"
     }
   ]
