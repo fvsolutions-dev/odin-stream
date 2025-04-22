@@ -66,6 +66,7 @@ void init_parameter_descriptor(nanobind::module_& m) {
 		.def(nb::init<>(), "Constructor for the ParameterMapDescriptor. Initializes with parameter map.")
 		.def("find_by_id", &ParameterMapDescriptor::find_by_id, "key"_a, "Get a ParameterDescriptor by its key.")
 		.def("find_by_name", &ParameterMapDescriptor::find_by_name, "name"_a, "Get a ParameterDescriptor by its name.")
-		.def("add_parameter", &ParameterMapDescriptor::add_parameter, "parameter"_a, "Add a parameter to the map.");
+		.def("add_parameter", &ParameterMapDescriptor::add_parameter, "parameter"_a, "Add a parameter to the map.")
+		.def("__repr__", &ParameterMapDescriptor::repr, "Get string representation of the parameter map descriptor.");
 		
 }

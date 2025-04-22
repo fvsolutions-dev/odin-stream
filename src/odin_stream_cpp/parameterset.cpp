@@ -49,8 +49,8 @@ namespace nb = nanobind;
 
 #define ARROW_ASSIGN_OR_THROW(lhs, rexpr) ARROW_ASSIGN_OR_THROW_IMPL(ARROW_ASSIGN_OR_RAISE_NAME(_error_or_value, __COUNTER__), lhs, rexpr)
 
-ParameterSet::ParameterSet(uint16_t identifier, uint32_t definition_identifier, std::shared_ptr<ParameterDefinition> type_descriptors)
-	: parameter_set_identifier(identifier), definition_identifier(definition_identifier), type_descriptors(type_descriptors) {}
+ParameterSet::ParameterSet(uint16_t identifier, uint32_t definition_identifier, std::shared_ptr<ParameterMapDescriptor> parameter_map)
+	: parameter_set_identifier(identifier), definition_identifier(definition_identifier), parameter_map(parameter_map) {}
 
 ParameterSet::~ParameterSet() {
 	// Destructor body can be empty if all resources are managed by the map
@@ -62,29 +62,29 @@ void ParameterSet::add(std::shared_ptr<FixedSizeParameter> param) {
 	data_size += param->get_size();  // Update the total data size
 }
 
-std::shared_ptr<ParameterSet> ParameterSet::from_identifier_data(nanobind::bytes data, std::shared_ptr<ParameterDefinition> type_descriptors) {
+std::shared_ptr<ParameterSet> ParameterSet::from_identifier_data(nanobind::bytes data, std::shared_ptr<ParameterMapDescriptor> parameter_map) {
 	stream_parameter_set_t* new_pset_ptr = stream_packet_parse_identifier((const uint8_t*)data.c_str(), data.size());
 
 	if (!new_pset_ptr) {
 		throw nb::value_error("Failed to parse identifier packet (invalid format, size, type, or memory allocation failed).");
 	}
 
-	ParameterSet parameterset = ParameterSet(new_pset_ptr->parameter_set_identifier, new_pset_ptr->definition_identifier, type_descriptors);
+	ParameterSet parameterset = ParameterSet(new_pset_ptr->parameter_set_identifier, new_pset_ptr->definition_identifier, parameter_map);
 
 	// Add the fixed size parameters to the map
 	for (size_t i = 0; i < new_pset_ptr->parameter_count; ++i) {
 		const stream_fixed_size_parameter_t& c_param = new_pset_ptr->parameters[i];
 
-        std::optional<std::shared_ptr<TypeDescriptor>> type = type_descriptors->find_by_id(c_param.index);
+		std::optional<std::shared_ptr<ParameterDescriptor>> type = parameter_map->find_by_id(c_param.index);
 
-        if (!type) {
-            printf("Warning: Type descriptor not found for index %u. Skipping parameter.\n", c_param.index);
-            continue;  // Skip if type descriptor is not found
-        }
+		if (!type) {
+			printf("Warning: Type descriptor not found for index %u. Skipping parameter.\n", c_param.index);
+			continue;  // Skip if type descriptor is not found
+		}
 
 		auto parawm =
 			std::make_shared<FixedSizeParameter>(FixedSizeParameter(c_param.index, c_param.size, type.value()));  // Create a new FixedSizeParameter object
-		parameterset.add(parawm);  // Use shared_ptr for memory management
+		parameterset.add(parawm);                                                                                 // Use shared_ptr for memory management
 	}
 
 	// Clean up the C struct
@@ -92,19 +92,6 @@ std::shared_ptr<ParameterSet> ParameterSet::from_identifier_data(nanobind::bytes
 	return std::make_shared<ParameterSet>(parameterset);  // Return a shared pointer to the new ParameterSet
 }
 
-// /**
-//  * @brief Parses a data packet, verifies it against the set, and returns data segments.
-//  *
-//  * Checks the packet header (type, hash) against the current ParameterSet state.
-//  * Verifies the packet size matches the total expected data size for the parameters in this set.
-//  * If all checks pass, extracts the data payload corresponding to each parameter
-//  * defined in this set and returns them as a list of new bytes objects.
-//  *
-//  * @param data The Python bytes object containing the data packet.
-//  * @return A list of Python bytes objects, one for each parameter in the set's defined order.
-//  * @throws nb::value_error or std::runtime_error on validation failure (bad type, hash, size).
-//  * @throws std::logic_error if the ParameterSet instance has internal inconsistencies.
-//  */
 void ParameterSet::parse_data_packet(nb::bytes data) {
 	// Check minimum size for header
 	if (data.size() < sizeof(streaming_data_packet_header_t)) {
@@ -126,7 +113,7 @@ void ParameterSet::parse_data_packet(nb::bytes data) {
 	if (data.size() != sizeof(streaming_data_packet_header_t) + data_size) {
 		// printf("Data size: %zu, expected size: %zu\n", data.size(), sizeof(streaming_data_packet_header_t) + data_size);
 		// throw nb::value_error("Packet size mismatch");
-        return;  // Skip if size doesn't match
+		return;  // Skip if size doesn't match
 	}
 	const uint8_t* payload_ptr = (const uint8_t*)data.c_str() + sizeof(streaming_data_packet_header_t);
 	for (size_t i = 0; i < parameters.size(); ++i) {
@@ -161,22 +148,19 @@ void ParameterSet::parse_data_packet(nb::bytes data) {
 std::shared_ptr<arrow::Table> ParameterSet::flush_to_arrow_table() {
 	std::vector<std::shared_ptr<arrow::Field>> fields;
 	std::vector<std::shared_ptr<arrow::Array>> arrays;
-    uint32_t datapoints = 0;
+	uint32_t datapoints = 0;
 	for (const auto& param : parameters) {
-		
-        std::vector<std::pair<std::shared_ptr<arrow::Array>, std::shared_ptr<arrow::Field>>> data = param->finish();
-        datapoints = param->get_datapoints();
+		std::vector<std::pair<std::shared_ptr<arrow::Array>, std::shared_ptr<arrow::Field>>> data = param->finish();
+		datapoints = param->get_datapoints();
 
-        for (const auto& [array, field] : data) {
-            fields.push_back(field);
-            arrays.push_back(array);
-        }
+		for (const auto& [array, field] : data) {
+			fields.push_back(field);
+			arrays.push_back(array);
+		}
 	}
-
 
 	auto schema = arrow::schema(fields);
 	auto table = arrow::Table::Make(schema, arrays, datapoints);
-
 
 	return table;
 }
@@ -187,11 +171,10 @@ void init_parameterset(nb::module_& m) {
 
 	// --- Bind ParameterSet Wrapper ---
 	nb::class_<ParameterSet>(m, "ParameterSet", "Manages a set of streaming parameters")
-		.def(nb::init<uint16_t, uint32_t, std::shared_ptr<ParameterDefinition>>(), "identifier"_a, "definition_identifier"_a, "type_descriptors"_a,
+		.def(nb::init<uint16_t, uint32_t, std::shared_ptr<ParameterMapDescriptor>>(), "identifier"_a, "definition_identifier"_a, "type_descriptors"_a,
 	         "Create a new ParameterSet with the given identifier and type descriptors.")
 		// .def("add", &ParameterSet::add, "param"_a, nb::rv_policy::reference_internal, "Add a FixedSizeParameter to the set.")
 		.def_static("from_identifier_data", &ParameterSet::from_identifier_data, "data"_a, "type_descriptors"_a,
 	                "Create a new ParameterSet from identifier data.")
 		.def("flush_to_arrow_table", &ParameterSet::flush_to_arrow_table, "Creates an Arrow table from the data in the parameters and clears them.");
-
 }

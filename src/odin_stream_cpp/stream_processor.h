@@ -9,18 +9,16 @@
 #include <nanobind_pyarrow/table.h>
 
 #include "parameterset.h"
-#include "types/primitive.h"
-#include "types/struct.h"
-#include "types/typedescriptors.h"
-
+#include "descriptor/parameter_descriptor.h"
+#include "descriptor/type_descriptor.h"
 
 class StreamProcessor {
    private:
 	std::unordered_map<uint16_t, std::shared_ptr<ParameterSet>> parameter_sets_map;
-	std::shared_ptr<ParameterDefinition> type_descriptors_map;
+	std::shared_ptr<ParameterMapDescriptor> parameter_map;
 
    public:
-	StreamProcessor(std::shared_ptr<ParameterDefinition> type_descriptors);
+	StreamProcessor(std::shared_ptr<ParameterMapDescriptor> parameter_map);
     
 	void process_bytes_list(nanobind::list bytes_list);
 

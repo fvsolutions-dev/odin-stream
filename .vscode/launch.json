@@ -5,14 +5,14 @@
       "name": "Python & C++: Current File Windows",
       "type": "pythoncpp",
       "request": "launch",
-      "pythonLaunchName": "Python: Current File",
+      "pythonLaunchName": "Python: Main",
       "cppAttachName": "(Windows) Attach",
     },
     {
       "name": "Python & C++: Current File Linux",
       "type": "pythoncpp",
       "request": "launch",
-      "pythonLaunchName": "Python: Current File",
+      "pythonLaunchName": "Python: Main",
       "cppAttachName": "(Linux) Attach",
     },
     {
@@ -27,6 +27,7 @@
       "type": "cppdbg",
       "request": "attach",
       "processId": "",
+      "miDebuggerPath": "/usr/bin/gdb"
     },
     {
       "name": "Python: Main",

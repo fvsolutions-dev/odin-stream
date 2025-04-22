@@ -46,6 +46,15 @@ class ParameterMapDescriptor {
 	std::optional<std::shared_ptr<ParameterDescriptor>> find_by_name(std::string name);
 
 	void add_parameter(std::shared_ptr<ParameterDescriptor> parameter) { parameter_map[parameter->get_id()] = parameter; }
+	std::string repr() const {
+		std::string result = "ParameterMapDescriptor(";
+		for (const auto& pair : parameter_map) {
+			result += pair.second->repr() + ", ";
+		}
+		result += ")";
+		return result;
+	}
+	
 };
 
 void init_parameter_descriptor(nanobind::module_& m);

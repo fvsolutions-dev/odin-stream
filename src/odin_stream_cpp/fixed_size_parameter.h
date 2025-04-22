@@ -150,23 +150,33 @@ class CompositeBuilder : public GenericBuilder {
 	uint32_t datapoints = 0;
 
    public:
-	CompositeBuilder(std::string name, std::shared_ptr<CompositeTypeDescriptor> struct_descriptor) : name(name) {
+	CompositeBuilder(std::string name, std::shared_ptr<ParameterDescriptor> parameter) : name(name) {
 		// Create the appropriate builders for each field in the struct
-		for (const auto& field : struct_descriptor->members) {
-			auto field_name = field.first;
-			auto field_descriptor = field.second;
+		auto type = parameter->get_type_descriptor();
 
-			if (auto primitive_shared_desc = std::dynamic_pointer_cast<PrimitiveTypeDescriptor>(field_descriptor)) {
-				std::string merged_name = name + "_" + field_name;
-				builders.push_back(std::make_shared<PrimitiveBuilder>(merged_name, primitive_shared_desc));
+		if (auto struct_desc = dynamic_cast<CompositeTypeDescriptor*>(type.get())) {
 
-			} else if (auto struct_desc = dynamic_cast<CompositeTypeDescriptor*>(field_descriptor.get())) {
-				throw std::runtime_error("Nested structs are not supported in CompositeBuilder.");
+			for (const auto& field : struct_desc->members) {
+				auto field_name = field.first;
+				auto field_descriptor = field.second;
 
-			} else {
-				throw std::runtime_error("Unsupported type in CompositeBuilder.");
+				if (auto primitive_shared_desc = std::dynamic_pointer_cast<PrimitiveTypeDescriptor>(field_descriptor)) {
+					
+					std::string merged_name = parameter->get_name() + "." + field_name;
+					builders.push_back(std::make_shared<PrimitiveBuilder>(merged_name, primitive_shared_desc));
+
+				} else if (auto struct_desc = dynamic_cast<CompositeTypeDescriptor*>(field_descriptor.get())) {
+					throw std::runtime_error("Nested structs are not yet supported in CompositeBuilder.");
+
+				} else {
+					throw std::runtime_error("Unsupported type in CompositeBuilder.");
+				}
 			}
 		}
+		else {
+			throw std::runtime_error("Expected a struct type descriptor in CompositeBuilder.");
+		}
+
 	}
 
 	void add_data(const uint8_t* data, size_t size) {
@@ -211,7 +221,7 @@ class FixedSizeParameter {
 			builder = std::make_shared<PrimitiveBuilder>(std::to_string(index), primitive_shared_desc);
 
 		} else if (auto struct_shared_desc = std::dynamic_pointer_cast<CompositeTypeDescriptor>(type_descriptor)) {
-			builder = std::make_shared<CompositeBuilder>(std::to_string(index), struct_shared_desc);
+			builder = std::make_shared<CompositeBuilder>(std::to_string(index), parameter);
 
 		} else {
 			throw std::runtime_error("Unsupported type descriptor for FixedSizeParameter.");
