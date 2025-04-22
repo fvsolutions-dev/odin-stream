@@ -1,5 +1,5 @@
-#include "odin_stream/stream_packet.h"
-#include "odin_stream/stream_parameter_set.h"
+#include "embedded_odin_stream/stream_packet.h"
+#include "embedded_odin_stream/stream_parameter_set.h"
 #include "odin_core.h"
 #include <stdint.h>
 

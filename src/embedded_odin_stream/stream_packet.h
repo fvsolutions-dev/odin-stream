@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "odin_stream/stream_parameter_set.h"
+#include "./stream_parameter_set.h"
 
 /**
  * @brief Defines the type of streaming packet.

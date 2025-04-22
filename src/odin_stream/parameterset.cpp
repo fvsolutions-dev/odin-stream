@@ -27,8 +27,8 @@
 
 // --- Include Refactored C API Headers ---
 extern "C" {
-#include "odin_stream/stream_packet.h"
-#include "odin_stream/stream_parameter_set.h"
+#include "embedded_odin_stream/stream_packet.h"
+#include "embedded_odin_stream/stream_parameter_set.h"
 }
 
 namespace nb = nanobind;

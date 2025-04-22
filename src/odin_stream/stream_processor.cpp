@@ -1,7 +1,7 @@
 #include "stream_processor.h"
 
 extern "C" {
-#include "odin_stream/stream_packet.h"
+#include "embedded_odin_stream/stream_packet.h"
 }
 
 namespace nb = nanobind;

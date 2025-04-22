@@ -1,4 +1,4 @@
-#include "odin_stream/stream_packet.h"
+#include "./stream_packet.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>

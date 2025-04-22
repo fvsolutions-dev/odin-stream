@@ -7,7 +7,7 @@
 
 #include <vector>
 
-#include "primitive.h"
+#include "./primitive.h"
 
 // Descriptor for structure types
 class StructDescriptor : public TypeDescriptor {

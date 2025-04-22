@@ -7,7 +7,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/unordered_map.h>
 
-#include "types/primitive.h"
+#include "./primitive.h"
 #include <optional>
 
 class TypeDescriptors {

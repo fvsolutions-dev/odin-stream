@@ -3,9 +3,9 @@ cmake_minimum_required(VERSION 3.15...3.26)
 # If ESP-IDF is reading this CMakeLists.txt, register it as an ESP-IDF component
 if(DEFINED ENV{IDF_PATH})
   idf_component_register(SRCS 
-    "src/odin_stream/stream_packet.c"
-    "src/odin_stream/stream_parameter_set.c"
-    "src/odin_stream.c"
+    "src/embedded_odin_stream/stream_packet.c"
+    "src/embedded_odin_stream/stream_parameter_set.c"
+    "src/embedded_odin_stream/odin_stream.c"
     INCLUDE_DIRS "src"
     REQUIRES "odin")
 
@@ -16,9 +16,9 @@ endif()
 if(Zephyr_FOUND)
   zephyr_library_named(odin-stream)
   zephyr_library_sources(
-    "src/odin_stream/stream_packet.c"
-    "src/odin_stream/stream_parameter_set.c"
-    "src/odin_stream.c"
+    "src/embedded_odin_stream/stream_packet.c"
+    "src/embedded_odin_stream/stream_parameter_set.c"
+    "src/embedded_odin_stream/odin_stream.c"
   )
 
   target_include_directories(odin-stream PUBLIC src)
@@ -120,16 +120,17 @@ nanobind_add_module(
   NB_STATIC
 
   # Source code goes here
-  src/odin_stream/stream_packet.c
-  src/odin_stream/stream_parameter_set.c
+  src/embedded_odin_stream/stream_packet.c
+  src/embedded_odin_stream/stream_parameter_set.c
+  
   # src/enums.cpp
-  src/fixed_size_parameter.cpp
-  src/parameterset.cpp
-  src/python_bindings.cpp
-  src/types/primitive.cpp
-  src/types/struct.cpp
-  src/stream_processor.cpp
-  src/types/typedescriptors.cpp
+  src/odin_stream/fixed_size_parameter.cpp
+  src/odin_stream/parameterset.cpp
+  src/odin_stream/python_bindings.cpp
+  src/odin_stream/types/primitive.cpp
+  src/odin_stream/types/struct.cpp
+  src/odin_stream/stream_processor.cpp
+  src/odin_stream/types/typedescriptors.cpp
   )
 
 nanobind_add_stub(

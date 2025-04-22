@@ -1,8 +1,6 @@
-#include "odin_stream.h"
 #include "odin_lookup.h"
-#include "odin_stream/stream_packet.h"
-
-//TODO: Make production worthy
+#include "embedded_odin_stream/stream_packet.h"
+#include "embedded_odin_stream/odin_stream.h"
 
 static header_set_t *decoding_manager_find_identifier(decoding_manager_t *manager, uint16_t identifier);
 

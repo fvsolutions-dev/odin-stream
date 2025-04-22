@@ -1,4 +1,4 @@
-#include "odin_stream/stream_parameter_set.h"
+#include "embedded_odin_stream/stream_parameter_set.h"
 
 #include <stdlib.h>
 #include <string.h>

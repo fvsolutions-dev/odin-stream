@@ -5,7 +5,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind_pyarrow/table.h>
-#include <types/typedescriptors.h>
+#include <odin_stream/types/typedescriptors.h>
 
 // Arrow headers
 #include <arrow/api.h>
@@ -17,13 +17,14 @@
 #include <arrow/status.h>
 // #include <arrow/table.h>
 #include <arrow/type.h>
-#include <types/struct.h>
 
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
+
+#include "./types/struct.h"
 
 #define ARROW_THROW_NOT_OK(status)                                     \
 	do {                                                               \

@@ -1,6 +1,6 @@
 
 #include "typedescriptors.h"
-#include "types/struct.h"
+#include "./struct.h"
 namespace nb = nanobind;
 
 TypeDescriptors::TypeDescriptors(nanobind::dict type_descriptors) {
