@@ -1,0 +1,6 @@
+
+ - [ ] Add type naming 
+ - [ ] Add value names
+ - [ ] Add ODIN hash verification
+ - [ ] Improve speed by switching to vector based decoding with reallocation
+

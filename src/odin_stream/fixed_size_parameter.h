@@ -5,7 +5,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind_pyarrow/table.h>
-#include <odin_stream/types/typedescriptors.h>
+#include "./types/typedescriptors.h"
 
 // Arrow headers
 #include <arrow/api.h>

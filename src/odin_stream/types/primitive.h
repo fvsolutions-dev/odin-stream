@@ -3,7 +3,7 @@
 #include <nanobind/nanobind.h>
 #include <arrow/type.h>
 
-enum class PrimitiveType { INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64, FLOAT32, FLOAT64, BOOL };
+enum class PrimitiveType { INT8, UINT8, INT16, UINT16, INT32, UINT32, INT64, UINT64, FLOAT32, FLOAT64, BOOL,CHAR };
 
 // Base class or variant alternative for type information
 class TypeDescriptor {
@@ -15,7 +15,6 @@ class TypeDescriptor {
     virtual std::string repr() const {
         return "TypeDescriptor()";  // Placeholder, replace with actual representation
     }
-
 
 };
 
@@ -40,6 +39,8 @@ class PrimitiveTypeDescriptor : public TypeDescriptor {
             case PrimitiveType::INT64: return arrow::int64();
             case PrimitiveType::UINT64: return arrow::uint64();
             case PrimitiveType::FLOAT64: return arrow::float64();
+            case PrimitiveType::BOOL: return arrow::boolean();
+            case PrimitiveType::CHAR: return arrow::utf8(); // Assuming CHAR is represented as a string
             default: throw std::runtime_error("Unknown primitive type in C++.");
         }
     }

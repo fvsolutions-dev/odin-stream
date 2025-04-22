@@ -5,8 +5,8 @@
 
 #include <cstdint>
 
-#include "fixed_size_parameter.h"
-#include "types/typedescriptors.h"
+#include "./fixed_size_parameter.h"
+#include "./types/typedescriptors.h"
 
 class ParameterSet {
    private:

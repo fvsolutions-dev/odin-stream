@@ -14,7 +14,7 @@ dependencies = [
   "pytest>=8.3.4,<9.0.0",
   "pytest-cov>=6.0.0,<7.0.0",
   "pytest-benchmark>=5.1.0,<6.0.0",
-  "odin-db>=1.0.0",
+  "odin-db>=1.1.0",
 ]
 license-files = ["LICENSE"]
 

@@ -101,7 +101,7 @@ endif()
 nanobind_add_module(
 
   # Name of the extension
-  odin_stream
+  odin_stream_cpp
 
   # domain name
   NB_DOMAIN burst_interface_domain
@@ -134,19 +134,19 @@ nanobind_add_module(
   )
 
 nanobind_add_stub(
-  odin_stream_stub
+  odin_stream_cpp_stub
   INSTALL_TIME
-  MODULE odin_stream
-  OUTPUT odin_stream.pyi
-  PYTHON_PATH $<TARGET_FILE_DIR:odin_stream>
-  DEPENDS odin_stream 
+  MODULE odin_stream_cpp
+  OUTPUT odin_stream_cpp.pyi
+  PYTHON_PATH $<TARGET_FILE_DIR:odin_stream_cpp>
+  DEPENDS odin_stream_cpp 
 )
 
-target_include_directories(odin_stream PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(odin_stream PRIVATE nanobind_pyarrow::nanobind_pyarrow nanobind_pyarrow::pyarrow)
+target_include_directories(odin_stream_cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(odin_stream_cpp PRIVATE nanobind_pyarrow::nanobind_pyarrow nanobind_pyarrow::pyarrow)
 
 # Add O3
-target_compile_options(odin_stream PRIVATE -O3)
+target_compile_options(odin_stream_cpp PRIVATE -O3)
 
 # Install directive for scikit-build-core
-install(TARGETS odin_stream LIBRARY DESTINATION ".")
+install(TARGETS odin_stream_cpp LIBRARY DESTINATION ".")

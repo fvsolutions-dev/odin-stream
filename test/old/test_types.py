@@ -1,4 +1,3 @@
-import pyarrow
 import odin_stream 
 from odin_stream import PrimitiveTypeDescriptor, PrimitiveType, StructDescriptor,TypeDescriptors
 import polars as pl
@@ -34,9 +33,9 @@ processor.process_bytes_list(data)
 
 sert = (processor.get_parameter_set(6684))
 # print(sert.flush_to_arrow_table())
-data = pl.from_arrow(sert.flush_to_arrow_table())
+# data = pl.from_arrow(sert.flush_to_arrow_table())
 # to csv
-data.write_csv("test/dataset.csv")
-
+# data.write_csv("test/dataset.csv")
+print(pl.from_arrow(sert.flush_to_arrow_table()))
 end = time.time()
 print(f"Execution time: {end - start} s")

@@ -10,7 +10,7 @@ namespace nb = nanobind;
 const std::map<PrimitiveType, size_t> primitive_sizes = {{PrimitiveType::INT8, 1},   {PrimitiveType::UINT8, 1},   {PrimitiveType::BOOL, 1},  // Common practice
                                                          {PrimitiveType::INT16, 2},  {PrimitiveType::UINT16, 2},  {PrimitiveType::INT32, 4},
                                                          {PrimitiveType::UINT32, 4}, {PrimitiveType::FLOAT32, 4}, {PrimitiveType::INT64, 8},
-                                                         {PrimitiveType::UINT64, 8}, {PrimitiveType::FLOAT64, 8}};
+                                                         {PrimitiveType::UINT64, 8}, {PrimitiveType::FLOAT64, 8}, {PrimitiveType::CHAR, 1}};
 
 PrimitiveTypeDescriptor::PrimitiveTypeDescriptor(PrimitiveType t) : type(t) {
 	auto it = primitive_sizes.find(t);
@@ -42,6 +42,7 @@ void init_primitive(nb::module_& m) {
 		.value("INT64", PrimitiveType::INT64)
 		.value("UINT64", PrimitiveType::UINT64)
 		.value("FLOAT64", PrimitiveType::FLOAT64)
+		.value("CHAR", PrimitiveType::CHAR)
         .export_values();
 
 }

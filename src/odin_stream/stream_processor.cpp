@@ -70,10 +70,6 @@ std::shared_ptr<ParameterSet> StreamProcessor::get_parameter_set(uint16_t identi
 void init_stream_processor(nb::module_& m) {
 	using namespace nb::literals;
 
-	nb::class_<TypeDescriptors>(m, "TypeDescriptors")
-		.def(nb::init<nb::dict>(), "type_descriptors"_a, "Constructor for the TypeDescriptors. Initializes with type descriptors.")
-		.def("get_type_descriptor", &TypeDescriptors::get_type_descriptor, "key"_a, "Get a TypeDescriptor by its key.");
-
 	nb::class_<StreamProcessor>(m, "StreamProcessor")
 		.def(nb::init<std::shared_ptr<TypeDescriptors>>(), "type_descriptors"_a, "Constructor for the StreamProcessor. Initializes with type descriptors.")
 		.def("process_bytes_list", &StreamProcessor::process_bytes_list, "bytes_list"_a, "Process a list of bytes.")
