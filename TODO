@@ -1,6 +1,11 @@
 
- - [ ] Add type naming 
- - [ ] Add value names
+ - [x] Add type naming 
+ - [x] Add value names
  - [ ] Add ODIN hash verification
- - [ ] Improve speed by switching to vector based decoding with reallocation
-
+ - [x] Improve speed by switching to vector based decoding with reallocation
+ - [ ] Add us timestamp support
+ - [ ] Sequence number skip detetcion (per set)
+ - [ ] Improve robustness
+ - [ ] Add statistics
+ - [ ] Improve tests
+ - [ ] 
