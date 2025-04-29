@@ -3,9 +3,9 @@ import odin_db
 import time
 ODIN_PATH = "test/OD.odin"
 with open(ODIN_PATH, "rb") as f:
-    odin_db = odin_db.OdinDBModel.model_validate_json(f.read())
+    odin_db_data = odin_db.OdinDBModel.model_validate_json(f.read())
 
-processor = StreamProcessor(odin_db)
+processor = StreamProcessor(odin_db_data,silent_errors=True)
 
 with open("test/dataset.hex", "r") as f:
     data = f.read()
@@ -14,11 +14,12 @@ with open("test/dataset.hex", "r") as f:
     
 
 start = time.time()
-print(f"Loaded {len(data)} packets")
 processor.process_bytes_list(data)
+
 
 end = time.time()
 result = processor.flush()
 print(f"Execution time: {end - start} s")
-print(result)
+
+print(processor.statistics)
 

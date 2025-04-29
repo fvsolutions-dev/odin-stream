@@ -28,14 +28,15 @@ typedef struct
     uint32_t received_unresolved_data_packets; // Total unresolved packets received
 
     uint32_t identifier_count; // Numver of data formats in the manager
-} decoding_manager_statistics_t;
+} odin_stream_decoder_statistics_t;
+
 typedef struct
 {
     header_set_t data[16];
     size_t count;
     size_t max_count;
     stream_event_callback_t event_callback;
-    decoding_manager_statistics_t statistics;
+    odin_stream_decoder_statistics_t statistics;
 } decoding_manager_t;
 
 stream_parameter_set_status_t parameter_set_add_parameter(stream_parameter_set_t *set,

@@ -46,7 +46,6 @@ void PrimitiveBuilder::add_data(const uint8_t* data, size_t size) {
 		throw std::length_error("Invalid data size provided. Expected " + std::to_string(type_descriptor->get_size()) + " bytes, but got " +
 		                        std::to_string(size) + " bytes.");
 	}
-
 	data_vector.insert(data_vector.end(), data, data + size);
 }
 
@@ -133,10 +132,14 @@ CompositeBuilder::CompositeBuilder(std::string name, std::shared_ptr<ParameterDe
 	auto type = parameter->get_type_descriptor();
 
 	if (auto struct_desc = dynamic_cast<CompositeTypeDescriptor*>(type.get())) {
+		
+		printf("CompositeBuilder: %s\n", std::string(parameter->get_name()).c_str());
+
 		for (const auto& field : struct_desc->members) {
+			printf("CompositeBuilder: %s\n", std::string(field.first).c_str());
 			auto field_name = field.first;
 			auto field_descriptor = field.second;
-
+			
 			if (auto primitive_shared_desc = std::dynamic_pointer_cast<PrimitiveTypeDescriptor>(field_descriptor)) {
 				std::string merged_name = parameter->get_name() + "." + field_name;
 				builders.push_back(std::make_shared<PrimitiveBuilder>(merged_name, primitive_shared_desc));
@@ -151,6 +154,8 @@ CompositeBuilder::CompositeBuilder(std::string name, std::shared_ptr<ParameterDe
 	} else {
 		throw std::runtime_error("Expected a struct type descriptor in CompositeBuilder.");
 	}
+	printf("CompositeBuilder: %s builders %d\n", std::string(parameter->get_name()).c_str(), builders.size());
+
 }
 
 void CompositeBuilder::add_data(const uint8_t* data, size_t size) {

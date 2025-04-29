@@ -61,10 +61,11 @@ class CompositeBuilder : public GenericBuilder {
    public:
 	CompositeBuilder(std::string name, std::shared_ptr<ParameterDescriptor> parameter);
 	void add_data(const uint8_t* data, size_t size);
+
 	uint32_t get_datapoints() const { 
         // Get the number of data points from the builders check they are all the same
         if (builders.empty()) {
-            return 0;
+            throw std::runtime_error("No builders available.");
         }
         uint32_t datapoints = builders[0]->get_datapoints();
         for (const auto& builder : builders) {

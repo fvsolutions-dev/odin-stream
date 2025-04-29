@@ -6,59 +6,101 @@ extern "C" {
 
 namespace nb = nanobind;
 
-StreamProcessor::StreamProcessor(std::shared_ptr<ParameterMapDescriptor> parameter_map) : parameter_map(parameter_map) {}
+OdinStreamDecoder::OdinStreamDecoder(std::shared_ptr<ParameterMapDescriptor> parameter_map, bool silent_errors)
+	: parameter_map(parameter_map), silent_errors(silent_errors) {}
 
-void StreamProcessor::process_bytes_list(nb::list bytes_list) {
+void OdinStreamDecoder::process_packets(nb::list bytes_list) {
 	for (const auto& handle : bytes_list) {
 		nb::bytes item = nb::cast<nb::bytes>(handle);
 
 		if (item.size() < sizeof(streaming_data_packet_header_t)) {
-			fprintf(stderr, "Warning: Input data too small (%zu bytes) to contain expected header. Skipping.\n", item.size());
+			statistics.other_errors++;
+			if (!silent_errors) {
+				throw nb::value_error("Input data too small to contain data packet header.");
+			}
 			continue;
 		}
 
+		// Check header type
 		const streaming_data_packet_header_t* header = reinterpret_cast<const streaming_data_packet_header_t*>(item.c_str());
 
+		// Check if we have a associated parameter set
 		auto it = parameter_sets_map.find(header->header.identifier);
 
-		if (header->header.type == STREAM_STREAM_PACKET_TYPE_IDENTIFIER) {
-			// If it exists, skip
-			if (it != parameter_sets_map.end()) {
-				continue;
+		try {
+			switch (header->header.type) {
+				// --- Process Identifier Packet ---
+				case STREAM_STREAM_PACKET_TYPE_IDENTIFIER:
+					statistics.received_identifier_packets++;
+
+					// If it exists, do nothing
+					if (it != parameter_sets_map.end()) {
+						ParameterSet& param_set = *it->second;
+						param_set.parse_identifier_data(item);
+					} else {
+						// If it doesn't exist, create a new one
+						std::shared_ptr<ParameterSet> new_set = ParameterSet::from_identifier_data(item, parameter_map);
+
+						// Insert the new parameter set into the map
+						parameter_sets_map.insert_or_assign(new_set->get_hash(), new_set);
+					}
+					break;
+
+				// --- Process Data Packet ---
+				case STREAM_STREAM_PACKET_TYPE_DATA:
+
+					if (it == parameter_sets_map.end()) {
+						statistics.received_unresolved_data_packets++;
+					} else {
+						statistics.received_data_packets++;
+						ParameterSet& param_set = *it->second;
+						param_set.parse_data_packet(item);
+					}
+
+					break;
+
+				// --- Process Event Packet ---
+				case STREAM_STREAM_PACKET_TYPE_EVENT:
+					statistics.received_events_packets++;
+					break;
+
+				default:
+					statistics.received_other_packets++;
+					break;
+			}
+		} catch (const std::exception& e) {
+			switch (header->header.type) {
+				case STREAM_STREAM_PACKET_TYPE_IDENTIFIER:
+					statistics.identifier_decoding_errors++;
+					break;
+				case STREAM_STREAM_PACKET_TYPE_DATA:
+					statistics.data_decoding_errors++;
+					break;
+				case STREAM_STREAM_PACKET_TYPE_EVENT:
+					statistics.event_decoding_errors++;
+					break;
+				default:
+					statistics.other_errors++;
+					break;
 			}
 
-			std::shared_ptr<ParameterSet> parsed_set = ParameterSet::from_identifier_data(item, parameter_map);
-			uint16_t identifier = parsed_set->get_hash();
-
-			parameter_sets_map.insert_or_assign(identifier, parsed_set);
-
-			printf("Stored/Updated ParameterSet with ID: %hu\n", identifier);
-		}
-		// // --- Process Data Packet ---
-		else if (header->header.type == STREAM_STREAM_PACKET_TYPE_DATA) {
-			uint16_t identifier = header->header.identifier;
-
-			if (it == parameter_sets_map.end()) {
-				// Parameter not yet defined
-				continue;
+			if (!silent_errors) {
+				// Reraise the exception
+				// This will be caught by the Python layer
+				// and can be handled there
+				throw nb::value_error((std::string("Error processing packet: ") + e.what()).c_str());
 			}
-			ParameterSet& param_set = *it->second;
-			param_set.parse_data_packet(item);
-
-		} else {
-			fprintf(stderr, "Warning: Encountered unknown packet type: %hu\n", header->header.type);
 		}
 	}
 }
 
-void StreamProcessor::clear_parameter_sets() {
+void OdinStreamDecoder::clear_parameter_sets() {
 	parameter_sets_map.clear();
 	printf("Cleared all stored ParameterSets.\n");
 }
 
-size_t StreamProcessor::get_parameter_set_count() const { return parameter_sets_map.size(); }
 
-std::shared_ptr<ParameterSet> StreamProcessor::get_parameter_set(uint16_t identifier) {
+std::shared_ptr<ParameterSet> OdinStreamDecoder::get_parameter_set(uint16_t identifier) {
 	auto it = parameter_sets_map.find(identifier);
 	if (it != parameter_sets_map.end()) {
 		return it->second;
@@ -67,7 +109,7 @@ std::shared_ptr<ParameterSet> StreamProcessor::get_parameter_set(uint16_t identi
 	}
 }
 
-std::vector<uint16_t> StreamProcessor::get_parameter_set_identifiers() const {
+std::vector<uint16_t> OdinStreamDecoder::get_parameter_set_identifiers() const {
 	std::vector<uint16_t> identifiers;
 	identifiers.reserve(parameter_sets_map.size());
 	for (const auto& pair : parameter_sets_map) {
@@ -76,15 +118,30 @@ std::vector<uint16_t> StreamProcessor::get_parameter_set_identifiers() const {
 	return identifiers;
 }
 
-
 void init_stream_processor(nb::module_& m) {
 	using namespace nb::literals;
 
-	nb::class_<StreamProcessor>(m, "StreamProcessor")
-		.def(nb::init<std::shared_ptr<ParameterMapDescriptor>>(), "parameter_map"_a, "Constructor for the StreamProcessor. Initializes with the parameter map.")
-		.def("process_bytes_list", &StreamProcessor::process_bytes_list, "bytes_list"_a, "Process a list of bytes.")
-		.def("get_parameter_set_count", &StreamProcessor::get_parameter_set_count, "Get the number of stored ParameterSets.")
-		.def("get_parameter_set", &StreamProcessor::get_parameter_set, "identifier"_a, "Get a ParameterSet by its identifier.")
-		.def("clear_parameter_sets", &StreamProcessor::clear_parameter_sets, "Clear all stored ParameterSets.")
-		.def("get_parameter_set_identifiers", &StreamProcessor::get_parameter_set_identifiers, "Get a list of all stored ParameterSet identifiers.");
-}
+	nb::class_<OdinStreamDecoder>(m, "StreamProcessor")
+		.def(nb::init<std::shared_ptr<ParameterMapDescriptor>, bool>(), "parameter_map"_a, "silent_errors"_a = false,
+	         "Constructor for the StreamProcessor. Initializes with the parameter map.")
+		.def("process_packets", &OdinStreamDecoder::process_packets, "bytes_list"_a, "Process a list of bytes.")
+		.def("get_parameter_set", &OdinStreamDecoder::get_parameter_set, "identifier"_a, "Get a ParameterSet by its identifier.")
+		.def("clear_parameter_sets", &OdinStreamDecoder::clear_parameter_sets, "Clear all stored ParameterSets.")
+		.def("get_parameter_set_identifiers", &OdinStreamDecoder::get_parameter_set_identifiers, "Get a list of all stored ParameterSet identifiers.")
+		.def_ro("statistics", &OdinStreamDecoder::statistics, "Get the statistics of the stream processor.");
+
+	nb::class_<OdinStreamStatistics>(m, "OdinStreamStatistics")
+		.def(nb::init<>())
+		.def_ro("identifier_decoding_errors", &OdinStreamStatistics::identifier_decoding_errors)
+		.def_ro("data_decoding_errors", &OdinStreamStatistics::data_decoding_errors)
+		.def_ro("event_decoding_errors", &OdinStreamStatistics::event_decoding_errors)
+		.def_ro("other_errors", &OdinStreamStatistics::other_errors)
+		.def_ro("received_events_packets", &OdinStreamStatistics::received_events_packets)
+		.def_ro("received_identifier_packets", &OdinStreamStatistics::received_identifier_packets)
+		.def_ro("received_data_packets", &OdinStreamStatistics::received_data_packets)
+		.def_ro("received_unresolved_data_packets", &OdinStreamStatistics::received_unresolved_data_packets)
+		.def_ro("received_other_packets", &OdinStreamStatistics::received_other_packets)
+		.def("__repr__", &OdinStreamStatistics::repr);
+
+
+	}

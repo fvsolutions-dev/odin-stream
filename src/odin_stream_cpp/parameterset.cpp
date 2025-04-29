@@ -24,6 +24,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+ 
 
 // --- Include Refactored C API Headers ---
 extern "C" {
@@ -75,16 +76,14 @@ std::shared_ptr<ParameterSet> ParameterSet::from_identifier_data(nanobind::bytes
 	for (size_t i = 0; i < new_pset_ptr->parameter_count; ++i) {
 		const stream_fixed_size_parameter_t& c_param = new_pset_ptr->parameters[i];
 
-		std::optional<std::shared_ptr<ParameterDescriptor>> type = parameter_map->find_by_id(c_param.index);
+		std::optional<std::shared_ptr<ParameterDescriptor>> descriptor = parameter_map->find_by_id(c_param.index);
 
-		if (!type) {
-			printf("Warning: Type descriptor not found for index %u. Skipping parameter.\n", c_param.index);
-			continue;  // Skip if type descriptor is not found
+		if (!descriptor) {
+			throw nb::value_error(std::string("Parameter with index " + std::to_string(c_param.index) + " not found in the parameter map.").c_str());
 		}
-
-		auto parawm =
-			std::make_shared<FixedSizeParameter>(FixedSizeParameter(c_param.index, c_param.size, type.value()));  // Create a new FixedSizeParameter object
-		parameterset.add(parawm);                                                                                 // Use shared_ptr for memory management
+		auto param =
+			std::make_shared<FixedSizeParameter>(FixedSizeParameter(c_param.index, c_param.size, descriptor.value()));  // Create a new FixedSizeParameter object
+		parameterset.add(param);                                                                                 // Use shared_ptr for memory management
 	}
 
 	// Clean up the C struct
@@ -93,65 +92,80 @@ std::shared_ptr<ParameterSet> ParameterSet::from_identifier_data(nanobind::bytes
 }
 
 void ParameterSet::parse_data_packet(nb::bytes data) {
+	
 	// Check minimum size for header
 	if (data.size() < sizeof(streaming_data_packet_header_t)) {
+		statistics.decoding_errors++;
 		throw nb::value_error("Input data too small to contain data packet header.");
 	}
 
 	// Check header type
 	const streaming_data_packet_header_t* header = (const streaming_data_packet_header_t*)data.c_str();
 	if (header->header.type != STREAM_STREAM_PACKET_TYPE_DATA) {
+		statistics.decoding_errors++;
 		throw nb::value_error("Incorrect packet type");
 	}
 
 	// Check hash match (consider if recalculation is needed)
 	// parameter_set_recalculate_hash(pset_ptr); // Maybe? Or trust stored hash.
 	if (header->header.identifier != parameter_set_identifier) {
+		statistics.decoding_errors++;
 		throw nb::value_error("Packet hash mismatch");
 	}
 
+	// Validate data size
 	if (data.size() != sizeof(streaming_data_packet_header_t) + data_size) {
-		// printf("Data size: %zu, expected size: %zu\n", data.size(), sizeof(streaming_data_packet_header_t) + data_size);
-		// throw nb::value_error("Packet size mismatch");
-		return;  // Skip if size doesn't match
+		statistics.decoding_errors++;
+		throw nb::value_error("Invalid data size");
 	}
+
 	const uint8_t* payload_ptr = (const uint8_t*)data.c_str() + sizeof(streaming_data_packet_header_t);
 	for (size_t i = 0; i < parameters.size(); ++i) {
 		size_t param_size = parameters[i]->get_size();
 		parameters[i]->add_data(payload_ptr, param_size);  // Add data to the parameter
 		payload_ptr += param_size;
 	}
-
-	// --- NEW: Extract and store sequence ID and timestamp ---
-	// !!! REPLACE `sequence_id` AND `timestamp` WITH ACTUAL MEMBER NAMES !!!
-	// Example assumes they exist directly in streaming_data_packet_header_t
-	// sequence_ids_.push_back(header->sequence_number);
-	// timestamps_.push_back(header->timestamp);
-	// --- END NEW ---
-
-	// 	// Sanity check: did we consume the whole payload exactly?
-	// 	assert(payload_ptr == buffer_end);
-	// }
-
-	// // --- Representation ---
-	// std::string ParameterSet::repr() const {
-	// 	if (!pset_ptr) {
-	// 		return "<ParameterSet (moved or destroyed)>";
-	// 	}
-	// 	std::stringstream ss;
-	// 	ss << "<ParameterSet count=" << pset_ptr->parameter_count << ", max=" << pset_ptr->parameter_count_max << ", hash=0x" << std::hex << std::setw(4)
-	// 	   << std::setfill('0') << pset_ptr->parameter_set_identifier << ">";
-	// 	return ss.str();
+	
+	// Add timestamp and sequence number
+	timestamp.push_back(header->timestamp);
+	sequence_number.push_back(header->sequence_number);
+	statistics.data_packets++;
 }
 
-// --- flush_to_arrow_table (Modified) ---
+void ParameterSet::parse_identifier_data(nanobind::bytes data) {
+	// No need to do anything here, as the identifier data is already parsed in from_identifier_data
+	statistics.identifier_packets++;
+}
+
+
 std::shared_ptr<arrow::Table> ParameterSet::flush_to_arrow_table() {
 	std::vector<std::shared_ptr<arrow::Field>> fields;
 	std::vector<std::shared_ptr<arrow::Array>> arrays;
 	
-	uint32_t datapoints = 0;
+	// Add timestamp and sequence number fields
+	auto timestamp_builder = std::make_shared<arrow::UInt32Builder>();
+	ARROW_THROW_NOT_OK(timestamp_builder->AppendValues(timestamp));
+	auto sequence_number_builder = std::make_shared<arrow::UInt16Builder>();
+	ARROW_THROW_NOT_OK(sequence_number_builder->AppendValues(sequence_number));
+
+
+	fields.push_back(arrow::field("__timestamp", arrow::uint32()));
+	fields.push_back(arrow::field("__sequence_number", arrow::uint16()));
+	arrays.push_back(timestamp_builder->Finish().ValueOrDie());
+	arrays.push_back(sequence_number_builder->Finish().ValueOrDie());
+
+	uint32_t datapoints = timestamp.size();
+
+	// Clear
+	timestamp.clear();
+	sequence_number.clear();
+
+	// Add parameter data
 	for (const auto& param : parameters) {
-		datapoints = param->get_datapoints();
+		if (param->get_datapoints() != datapoints) {
+			throw std::length_error("Inconsistent datapoints size in " + param->get_parameter()->get_name() +
+			                        ": expected " + std::to_string(datapoints) + ", got " + std::to_string(param->get_datapoints()));
+		}
 
 		std::vector<std::pair<std::shared_ptr<arrow::Array>, std::shared_ptr<arrow::Field>>> data = param->finish();
 
@@ -161,6 +175,7 @@ std::shared_ptr<arrow::Table> ParameterSet::flush_to_arrow_table() {
 		}
 	}
 
+	
 	auto schema = arrow::schema(fields);
 	auto table = arrow::Table::Make(schema, arrays, datapoints);
 
@@ -175,7 +190,6 @@ void init_parameterset(nb::module_& m) {
 	nb::class_<ParameterSet>(m, "ParameterSet", "Manages a set of streaming parameters")
 		.def(nb::init<uint16_t, uint32_t, std::shared_ptr<ParameterMapDescriptor>>(), "identifier"_a, "definition_identifier"_a, "type_descriptors"_a,
 	         "Create a new ParameterSet with the given identifier and type descriptors.")
-		// .def("add", &ParameterSet::add, "param"_a, nb::rv_policy::reference_internal, "Add a FixedSizeParameter to the set.")
 		.def_static("from_identifier_data", &ParameterSet::from_identifier_data, "data"_a, "type_descriptors"_a,
 	                "Create a new ParameterSet from identifier data.")
 		.def("flush_to_arrow_table", &ParameterSet::flush_to_arrow_table, "Creates an Arrow table from the data in the parameters and clears them.");

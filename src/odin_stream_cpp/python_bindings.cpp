@@ -15,5 +15,5 @@ NB_MODULE(odin_stream_cpp, m) {  // Changed module name to avoid collision and b
 	init_parameter_descriptor(m);  // Initialize the ParameterDescriptor bindings
 	init_fixed_size_parameter(m);  // Initialize the FixedSizeParameter bindings
 	init_parameterset(m);          // Initialize the ParameterSet bindings
-	init_stream_processor(m);      // Initialize the StreamProcessor bindings
+	init_stream_processor(m);      // Initialize the OdinStreamDecoder bindings
 }

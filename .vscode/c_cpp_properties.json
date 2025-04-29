@@ -1,7 +1,7 @@
 {
     "configurations": [
         {
-            "name": "Linux",
+            "name": "cmakelist - docker",
             "compilerPath": "/usr/bin/cc",
             "cStandard": "c17",
             "cppStandard": "gnu++17",
