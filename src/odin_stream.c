@@ -20,10 +20,25 @@ stream_parameter_set_status_t parameter_set_add_parameter_group(stream_parameter
 {
     for (int i = 0; i < group->count; i++)
     {
-        stream_parameter_set_status_t ret = parameter_set_add_parameter(set, group->parameters[i]);
-        if (ret != STREAM_PARAM_SET_SUCCESS)
+        ODIN_parameter_generic_t *generic_parameter = (ODIN_parameter_generic_t *)group->parameters[i];
+        if (generic_parameter->odin_type == ODIN_TYPE_GROUP)
         {
-            return ret;
+            // Recursively add the parameter group
+            stream_parameter_set_status_t ret = parameter_set_add_parameter_group(set, (ODIN_parameter_group_t *)group->parameters[i]);
+            if (ret != STREAM_PARAM_SET_SUCCESS)
+            {
+                return ret;
+            }
+            continue;
+        }
+        
+        else if (generic_parameter->odin_type == ODIN_TYPE_PARAMETER)
+        {
+            parameter_set_add_parameter(set, (ODIN_parameter_t *)group->parameters[i]);
+        }
+        else
+        {
+            return STREAM_PARAM_SET_ERROR_INVALID;
         }
     }
     return STREAM_PARAM_SET_SUCCESS;
