@@ -8,4 +8,9 @@
  - [ ] Improve robustness
  - [ ] Add statistics
  - [ ] Improve tests
- - [ ] 
+
+Round 2
+ - [ ] Add support for composite types
+ - [ ] Add boolean support
+ - [ ] Add support for array like types
+  
