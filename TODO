@@ -1,0 +1,16 @@
+
+ - [x] Add type naming 
+ - [x] Add value names
+ - [ ] Add ODIN hash verification
+ - [x] Improve speed by switching to vector based decoding with reallocation
+ - [ ] Add us timestamp support
+ - [ ] Sequence number skip detetcion (per set)
+ - [ ] Improve robustness
+ - [ ] Add statistics
+ - [ ] Improve tests
+
+Round 2
+ - [ ] Add support for composite types
+ - [ ] Add boolean support
+ - [ ] Add support for array like types
+  

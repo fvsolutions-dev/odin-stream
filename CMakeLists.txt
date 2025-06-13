@@ -3,9 +3,9 @@ cmake_minimum_required(VERSION 3.15...3.26)
 # If ESP-IDF is reading this CMakeLists.txt, register it as an ESP-IDF component
 if(DEFINED ENV{IDF_PATH})
   idf_component_register(SRCS 
-    "src/odin_stream/stream_packet.c"
-    "src/odin_stream/stream_parameter_set.c"
-    "src/odin_stream.c"
+    "src/embedded_odin_stream/stream_packet.c"
+    "src/embedded_odin_stream/stream_parameter_set.c"
+    "src/embedded_odin_stream/odin_stream.c"
     INCLUDE_DIRS "src"
     REQUIRES "odin")
 
@@ -13,12 +13,12 @@ if(DEFINED ENV{IDF_PATH})
 endif()
 
 # If Zephyr is reading this CMakeLists.txt, register it as a Zephyr module
-if(DEFINED ENV{ZEPHYR_BASE})
+if(Zephyr_FOUND)
   zephyr_library_named(odin-stream)
   zephyr_library_sources(
-    "src/odin_stream/stream_packet.c"
-    "src/odin_stream/stream_parameter_set.c"
-    "src/odin_stream.c"
+    "src/embedded_odin_stream/stream_packet.c"
+    "src/embedded_odin_stream/stream_parameter_set.c"
+    "src/embedded_odin_stream/odin_stream.c"
   )
 
   target_include_directories(odin-stream PUBLIC src)
@@ -28,6 +28,9 @@ if(DEFINED ENV{ZEPHYR_BASE})
 endif()
 
 project(i_think_this_name_does_not_matter LANGUAGES C CXX)
+
+# create compile_commands.json
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT SKBUILD)
   message(WARNING "\
@@ -57,17 +60,18 @@ find_package(Python 3.8
   REQUIRED COMPONENTS Interpreter Development.Module
   OPTIONAL_COMPONENTS Development.SABIModule)
 
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
-option(COVERAGE "Enable coverage reporting" ON)
+# option(COVERAGE "Enable coverage reporting" ON)
 
-if(COVERAGE)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -fprofile-arcs -ftest-coverage")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g -fprofile-arcs -ftest-coverage")
-endif()
+# if(COVERAGE)
+#   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -fprofile-arcs -ftest-coverage")
+#   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g -fprofile-arcs -ftest-coverage")
+# endif()
 
 execute_process(
   COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
@@ -77,11 +81,27 @@ list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
 # Import nanobind through CMake's find_package mechanism
 find_package(nanobind CONFIG REQUIRED)
 
+
+
+include(FetchContent)
+FetchContent_Declare(
+  nanobind_pyarrow
+  GIT_REPOSITORY https://github.com/maximiliank/nanobind_pyarrow.git
+  GIT_TAG origin/main
+  UPDATE_DISCONNECTED ON)
+
+FetchContent_MakeAvailable(nanobind_pyarrow)
+
+
+if(NOT TARGET nanobind_pyarrow::pyarrow)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${nanobind_pyarrow_SOURCE_DIR}/cmake")
+find_package(PyArrow REQUIRED)
+endif()
 # We are now ready to compile the actual extension module
 nanobind_add_module(
 
   # Name of the extension
-  odin_stream
+  odin_stream_cpp
 
   # domain name
   NB_DOMAIN burst_interface_domain
@@ -98,24 +118,35 @@ nanobind_add_module(
   # replace this flag by NB_SHARED to conserve space by
   # reusing a shared libnanobind across libraries
   NB_STATIC
+  src/odin_stream_cpp/python_bindings.cpp
+
 
   # Source code goes here
-  src/odin_stream/stream_packet.c
-  src/odin_stream/stream_parameter_set.c
-  src/python_bindings.cpp
-)
+  src/embedded_odin_stream/stream_packet.c
+  src/embedded_odin_stream/stream_parameter_set.c
+  
+  src/odin_stream_cpp/fixed_size_parameter.cpp
+  src/odin_stream_cpp/parameterset.cpp
+  src/odin_stream_cpp/stream_processor.cpp
+  src/odin_stream_cpp/builder.cpp
+  src/odin_stream_cpp/descriptor/parameter_descriptor.cpp
+  src/odin_stream_cpp/descriptor/type_descriptor.cpp
+  )
 
 nanobind_add_stub(
-
-  odin_stream_stub
+  odin_stream_cpp_stub
   INSTALL_TIME
-  MODULE odin_stream
-  OUTPUT odin_stream.pyi
-  PYTHON_PATH $<TARGET_FILE_DIR:odin_stream>
-  DEPENDS odin_stream
+  MODULE odin_stream_cpp
+  OUTPUT odin_stream_cpp.pyi
+  PYTHON_PATH $<TARGET_FILE_DIR:odin_stream_cpp>
+  DEPENDS odin_stream_cpp 
 )
 
-target_include_directories(odin_stream PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(odin_stream_cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(odin_stream_cpp PRIVATE nanobind_pyarrow::nanobind_pyarrow nanobind_pyarrow::pyarrow)
+
+# Add O3
+target_compile_options(odin_stream_cpp PRIVATE -O3)
 
 # Install directive for scikit-build-core
-install(TARGETS odin_stream LIBRARY DESTINATION ".")
+install(TARGETS odin_stream_cpp LIBRARY DESTINATION ".")
