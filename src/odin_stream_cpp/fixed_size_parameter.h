@@ -79,7 +79,7 @@ class FixedSizeParameter {
 		return builder->finish();
 	}
 
-	uint32_t get_datapoints() const { return builder->get_datapoints(); }
+	uint32_t get_datapoint_count() const { return builder->get_datapoint_count(); }
 };
 
 void init_fixed_size_parameter(nanobind::module_& m);

@@ -51,7 +51,7 @@ Note: You need a valid C++ compiler and Python 3.7+ installed on your system.
 
 Basic installation
 ```sh
-uv pip install --reinstall -e .
+uv pip install --reinstall -ve .
 ```
 
 Fast build
@@ -62,6 +62,11 @@ uv pip install --reinstall --no-build-isolation -ve .
 Auto rebuild on run
 ```sh
 uv pip install --reinstall --no-build-isolation -Ceditable.rebuild=true -ve .
+``` 
+
+WIP
+```sh
+pip install --no-build-isolation -Ceditable.rebuild=true -ve .
 ``` 
 
 
@@ -80,3 +85,10 @@ pytest test
 ```
 
 
+
+
+# Release
+Create wheel
+```sh
+uv run pip wheel . --wheel-dir ./dist --no-deps --no-build-isolation -v
+```

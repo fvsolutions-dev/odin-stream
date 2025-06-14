@@ -1,6 +1,7 @@
 import odin_db
+from odin_db import OdinDBModel, ODINDBModelType, OdinDBTypeDefinitionModel
+
 import odin_stream_cpp
-from odin_db import OdinDBModel, OdinDBTypeDefinitionModel, ODINDBModelType
 
 
 def odin_db_to_flat_list(
@@ -63,22 +64,30 @@ def db_type_to_steam_type(
             elif isinstance(sub_type.structure, dict):
                 for sub_sub_name, sub_sub_type in sub_type.structure.items():
                     if isinstance(sub_sub_type, odin_db.ODINDBModelType):
-                        descriptor = odin_stream_cpp.PrimitiveTypeDescriptor.get_by_name(
-                            sub_sub_type.name.lower()
+                        descriptor = (
+                            odin_stream_cpp.PrimitiveTypeDescriptor.get_by_name(
+                                sub_sub_type.name.lower()
+                            )
                         )
-                        composite_descriptor.add_member(f"{sub_name}_{sub_sub_name}", descriptor)
+                        composite_descriptor.add_member(
+                            f"{sub_name}_{sub_sub_name}", descriptor
+                        )
 
                     elif isinstance(sub_sub_type.structure, odin_db.ODINDBModelType):
-                        descriptor = odin_stream_cpp.PrimitiveTypeDescriptor.get_by_name(
-                            sub_sub_type.structure.name.lower()
+                        descriptor = (
+                            odin_stream_cpp.PrimitiveTypeDescriptor.get_by_name(
+                                sub_sub_type.structure.name.lower()
+                            )
                         )
-                        composite_descriptor.add_member(f"{sub_name}_{sub_sub_name}", descriptor)
+                        composite_descriptor.add_member(
+                            f"{sub_name}_{sub_sub_name}", descriptor
+                        )
 
                     elif isinstance(sub_sub_type.structure, dict):
                         raise ValueError(
                             "maximum depth of composite types is 2, please flatten the structure"
                         )
-                    
+
     return composite_descriptor
 
 

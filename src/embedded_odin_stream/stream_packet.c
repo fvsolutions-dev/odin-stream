@@ -20,10 +20,10 @@
  * @return STREAM_PACKET_ERROR_INTERNAL if parameter_set state is inconsistent (e.g., null parameters array).
  */
 int stream_packet_create_identifier(stream_parameter_set_t *parameter_set,
-                                    uint8_t                *buffer,
-                                    size_t                  buffer_size,
-                                    uint32_t                timestamp,
-                                    uint32_t                header_transmission_interval)
+                                    uint8_t *buffer,
+                                    size_t buffer_size,
+                                    uint32_t timestamp,
+                                    uint32_t header_transmission_interval)
 {
     if (!parameter_set || !buffer)
     {
@@ -43,7 +43,7 @@ int stream_packet_create_identifier(stream_parameter_set_t *parameter_set,
 
     // Calculate required size *before* writing anything
     size_t required_payload_size = parameter_set->parameter_count * sizeof(streaming_identifier_item_t);
-    size_t required_total_size   = sizeof(streaming_identifier_packet_header_t) + required_payload_size;
+    size_t required_total_size = sizeof(streaming_identifier_packet_header_t) + required_payload_size;
 
     if (buffer_size < required_total_size)
     {
@@ -58,7 +58,7 @@ int stream_packet_create_identifier(stream_parameter_set_t *parameter_set,
 
         streaming_identifier_item_t item = {
             .index = parameter->index,
-            .size  = (uint16_t)parameter->size,
+            .size = (uint16_t)parameter->size,
         };
 
         memcpy(payload_ptr, &item, sizeof(streaming_identifier_item_t));
@@ -68,8 +68,8 @@ int stream_packet_create_identifier(stream_parameter_set_t *parameter_set,
     // Write header
     streaming_identifier_packet_header_t *packet_header = (streaming_identifier_packet_header_t *)buffer;
 
-    packet_header->header.type           = STREAM_STREAM_PACKET_TYPE_IDENTIFIER;
-    packet_header->header.identifier     = parameter_set->parameter_set_identifier;
+    packet_header->header.type = STREAM_STREAM_PACKET_TYPE_IDENTIFIER;
+    packet_header->header.identifier = parameter_set->parameter_set_identifier;
     packet_header->definition_identifier = parameter_set->definition_identifier;
 
     // Return bytes written (cast is safe as required_total_size was checked against buffer_size)
@@ -95,6 +95,15 @@ int stream_packet_create_identifier(stream_parameter_set_t *parameter_set,
  * - If the payload size is inconsistent (not a multiple of item size).
  * - If memory allocation fails via parameter_set_create.
  */
+#define DEBUG_PRINTF(...)                          \
+    do                                             \
+    {                                              \
+        if (0)                                    \
+        { /* Change to 1 to enable debug output */ \
+            printf(__VA_ARGS__);                   \
+        }                                          \
+    } while (0)
+
 stream_parameter_set_t *stream_packet_parse_identifier(const uint8_t *buffer, size_t buffer_size)
 {
     if (!buffer)
@@ -109,14 +118,16 @@ stream_parameter_set_t *stream_packet_parse_identifier(const uint8_t *buffer, si
 
     const streaming_identifier_packet_header_t *packet_header = (const streaming_identifier_packet_header_t *)buffer;
     if (packet_header->header.type != STREAM_STREAM_PACKET_TYPE_IDENTIFIER)
-    {
+    {   
+        DEBUG_PRINTF("Invalid packet type: %d\n", packet_header->header.type);
         return NULL; // Invalid packet type
     }
-
+    int e = sizeof(streaming_identifier_packet_header_t);
     // Calculate expected payload size and parameter count
     size_t payload_size = buffer_size - sizeof(streaming_identifier_packet_header_t);
     if ((payload_size % sizeof(streaming_identifier_item_t)) != 0)
     {
+        DEBUG_PRINTF("Payload size is not a multiple of item size: %zu item_size %d\n", payload_size, (int)sizeof(streaming_identifier_item_t));
         return NULL; // Payload size not a multiple of item size
     }
     size_t parameter_count = payload_size / sizeof(streaming_identifier_item_t);
@@ -125,6 +136,7 @@ stream_parameter_set_t *stream_packet_parse_identifier(const uint8_t *buffer, si
     stream_parameter_set_t *parameter_set = stream_parameter_set_create(parameter_count);
     if (!parameter_set)
     {
+        DEBUG_PRINTF("Failed to allocate parameter set\n");
         return NULL; // Allocation failed
     }
 
@@ -134,18 +146,18 @@ stream_parameter_set_t *stream_packet_parse_identifier(const uint8_t *buffer, si
     {
         const streaming_identifier_item_t *item = (const streaming_identifier_item_t *)item_ptr;
 
-        stream_parameter_set_status_t ret
-            = stream_parameter_set_add(parameter_set,
-                                       (stream_fixed_size_parameter_t) {
+        stream_parameter_set_status_t ret = stream_parameter_set_add(parameter_set,
+                                                                     (stream_fixed_size_parameter_t){
 
-                                           .index = item->index,
-                                           .size  = item->size,
-                                           .data  = NULL, // Data pointer is NULL for header packets
-                                       });
+                                                                         .index = item->index,
+                                                                         .size = item->size,
+                                                                         .data = NULL, // Data pointer is NULL for header packets
+                                                                     });
 
         // Check if the parameter was added successfully
         if (ret != STREAM_PARAM_SET_SUCCESS)
         {
+            DEBUG_PRINTF("Failed to add parameter %zu: %d\n", i, ret);
             stream_parameter_set_destroy(parameter_set);
             return NULL; // Failed to add parameter
         }
@@ -156,11 +168,14 @@ stream_parameter_set_t *stream_packet_parse_identifier(const uint8_t *buffer, si
     //  Verify hash and count directly (bypass update_hash as we fill from packet)
     if (parameter_set->parameter_count != parameter_count)
     {
+        DEBUG_PRINTF("Parameter count mismatch: expected %zu, got %zu\n", parameter_count, parameter_set->parameter_count);
         stream_parameter_set_destroy(parameter_set);
         return NULL; // Inconsistent state
     }
     if (parameter_set->parameter_set_identifier != packet_header->header.identifier)
     {
+        DEBUG_PRINTF("Parameter set identifier mismatch: expected %u, got %u\n",
+                     packet_header->header.identifier, parameter_set->parameter_set_identifier);
         stream_parameter_set_destroy(parameter_set);
         return NULL; // Hash mismatch
     }
@@ -186,10 +201,10 @@ stream_parameter_set_t *stream_packet_parse_identifier(const uint8_t *buffer, si
  * @return STREAM_PACKET_ERROR_BADSIZE if buffer_size is insufficient for the header and all parameter data.
  */
 int stream_packet_create_data(stream_parameter_set_t *parameter_set,
-                              uint8_t                      *buffer,
-                              size_t                        buffer_size,
-                              uint32_t                      timestamp,
-                              uint32_t                      data_transmission_interval)
+                              uint8_t *buffer,
+                              size_t buffer_size,
+                              uint32_t timestamp,
+                              uint32_t data_transmission_interval)
 {
 
     if (!parameter_set || !buffer)
@@ -233,14 +248,14 @@ int stream_packet_create_data(stream_parameter_set_t *parameter_set,
 
     // Write header
     streaming_data_packet_header_t *packet_header = (streaming_data_packet_header_t *)buffer;
-    packet_header->header.type                    = STREAM_STREAM_PACKET_TYPE_DATA;
-    packet_header->header.identifier              = parameter_set->parameter_set_identifier;
-    packet_header->timestamp                      = timestamp;
-    packet_header->sequence_number                = parameter_set->last_transmission_sequence_number++;
+    packet_header->header.type = STREAM_STREAM_PACKET_TYPE_DATA;
+    packet_header->header.identifier = parameter_set->parameter_set_identifier;
+    packet_header->timestamp = timestamp;
+    packet_header->sequence_number = parameter_set->last_transmission_sequence_number++;
 
     // Sanity check that we wrote exactly the expected number of bytes
     assert((size_t)(payload_write_ptr - buffer) == required_total_size);
-    
+
     parameter_set->last_data_transmission_timestamp = timestamp;
 
     // Return bytes written (cast is safe as required_total_size checked against buffer_size)
@@ -267,8 +282,8 @@ int stream_packet_create_data(stream_parameter_set_t *parameter_set,
  * Its parameters must have valid 'data' pointers and correct 'size' values.
  * @return streaming_packet_status_t indicating success or failure reason.
  */
-stream_packet_status_t stream_packet_parse_data(const uint8_t          *buffer,
-                                                size_t                  buffer_size,
+stream_packet_status_t stream_packet_parse_data(const uint8_t *buffer,
+                                                size_t buffer_size,
                                                 stream_parameter_set_t *parameter_set)
 {
     if (!buffer || !parameter_set)
@@ -358,9 +373,9 @@ int stream_packet_create_event(uint8_t *buffer, size_t buffer_size, stream_event
 
     // Write header
     streaming_event_packet_header_t *packet_header = (streaming_event_packet_header_t *)buffer;
-    packet_header->header.type                     = STREAM_STREAM_PACKET_TYPE_EVENT;
-    packet_header->header.identifier               = event.event_id;
-    packet_header->timestamp                       = event.timestamp;
+    packet_header->header.type = STREAM_STREAM_PACKET_TYPE_EVENT;
+    packet_header->header.identifier = event.event_id;
+    packet_header->timestamp = event.timestamp;
 
     // Return bytes written (cast is safe as required_total_size checked against buffer_size)
     return (int)required_total_size;
@@ -398,10 +413,10 @@ stream_packet_status_t stream_packet_parse_event(const uint8_t *buffer, size_t b
     }
 
     // Parse event data
-    event->event_data     = buffer + sizeof(streaming_event_packet_header_t);
-    event->event_size     = buffer_size - sizeof(streaming_event_packet_header_t);
-    event->event_id       = packet_header->header.identifier;
-    event->timestamp      = packet_header->timestamp;
+    event->event_data = buffer + sizeof(streaming_event_packet_header_t);
+    event->event_size = buffer_size - sizeof(streaming_event_packet_header_t);
+    event->event_id = packet_header->header.identifier;
+    event->timestamp = packet_header->timestamp;
     event->event_sequence = packet_header->sequence_number;
     return STREAM_PACKET_SUCCESS;
 }

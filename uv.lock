@@ -114,14 +114,14 @@ wheels = [
 
 [[package]]
 name = "odin-db"
-version = "1.1.0"
+version = "1.3.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/91/df/90ecac5a0aba213c2fffb3ce4436af3675d935119680aa354140eeea7cd3/odin_db-1.1.0.tar.gz", hash = "sha256:725677faf70bc04788747211e9d8d44fbee8c65abdcb7392872ef3de9f334b0b", size = 11295 }
+sdist = { url = "https://files.pythonhosted.org/packages/67/44/0694143af7e129dc900fc357364596ec21a9d7a61112f80003dc32f45ee1/odin_db-1.3.2.tar.gz", hash = "sha256:76c9f18d9ab174bafad5f15026022869ea86759343a5493e22c84a36a2f3103a", size = 17450 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/ae/6e7b946b9092bd80808e10e8fb57c416951832384d7f854da5cf849b40da/odin_db-1.1.0-py3-none-any.whl", hash = "sha256:0965a195757e9bbd10d339e27c65e659a73abe0e9c0b0afc51ce3e72959a9a29", size = 2267 },
+    { url = "https://files.pythonhosted.org/packages/f0/7f/81f54d3c5e5b1ba271156d9855e52b7a058fbbf2add64bad3cc5f6a1ea0d/odin_db-1.3.2-py3-none-any.whl", hash = "sha256:e534b21399840191d3bd720573f344aafe0df70cf453c26943ccc8707c2eb708", size = 8217 },
 ]
 
 [[package]]
@@ -143,7 +143,7 @@ dependencies = [
 requires-dist = [
     { name = "nanobind", specifier = ">=2.5.0,<3.0.0" },
     { name = "nanobind", specifier = ">=2.6.1" },
-    { name = "odin-db", specifier = ">=1.1.0" },
+    { name = "odin-db", specifier = ">=1.3.2" },
     { name = "polars", specifier = ">=1.27.1" },
     { name = "pyarrow", specifier = ">=19.0.0,<20.0.0" },
     { name = "pytest", specifier = ">=8.3.4,<9.0.0" },

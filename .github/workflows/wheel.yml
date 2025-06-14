@@ -37,7 +37,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest,  windows-latest]
-        # os: [ windows-latest]
 
     steps:
     - uses: actions/checkout@v4
@@ -46,10 +45,10 @@ jobs:
 
     - uses: pypa/cibuildwheel@v2.22
 
-      # env:
-        # CIBW_BUILD: "cp312-*"
-        # CIBW_BUILD: "cp312-manylinux_x86_64"
-
+      env:
+        CIBW_BUILD: cp312* cp313*
+        CIBW_SKIP: "*win32* *i686* *musllinux*"
+        
     - name: Verify clean directory
       run: git diff --exit-code
       shell: bash

@@ -29,6 +29,11 @@ endif()
 
 project(i_think_this_name_does_not_matter LANGUAGES C CXX)
 
+if (MSVC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreadedDLL CACHE STRING "" FORCE)
+  add_compile_options(/EHsc)             # ensure exceptions are enabled
+endif()
+
 # create compile_commands.json
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -66,13 +71,6 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
-# option(COVERAGE "Enable coverage reporting" ON)
-
-# if(COVERAGE)
-#   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g -fprofile-arcs -ftest-coverage")
-#   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g -fprofile-arcs -ftest-coverage")
-# endif()
-
 execute_process(
   COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
   OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE NB_DIR)
@@ -96,7 +94,30 @@ FetchContent_MakeAvailable(nanobind_pyarrow)
 if(NOT TARGET nanobind_pyarrow::pyarrow)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${nanobind_pyarrow_SOURCE_DIR}/cmake")
 find_package(PyArrow REQUIRED)
+
+
+if (WIN32)
+  # PyArrow’s CMake config sets only IMPORTED_LOCATION, not IMPORTED_IMPLIB,
+  # so point CMake at the .lib import libraries it needs on Windows:
+
+  # arrow::arrow
+  get_target_property(_arrow_loc arrow::arrow IMPORTED_LOCATION)
+  get_filename_component(_arrow_dir ${_arrow_loc} DIRECTORY)
+  set_target_properties(arrow::arrow PROPERTIES
+    IMPORTED_IMPLIB "${_arrow_dir}/arrow.lib"
+  )
+
+  # pyarrow::pyarrow
+  get_target_property(_pa_loc pyarrow::pyarrow IMPORTED_LOCATION)
+  get_filename_component(_pa_dir ${_pa_loc} DIRECTORY)
+  set_target_properties(pyarrow::pyarrow PROPERTIES
+    IMPORTED_IMPLIB "${_pa_dir}/arrow_python.lib"
+  )
+
 endif()
+
+endif()
+
 # We are now ready to compile the actual extension module
 nanobind_add_module(
 
@@ -146,37 +167,37 @@ target_include_directories(odin_stream_cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/s
 target_link_libraries(odin_stream_cpp PRIVATE nanobind_pyarrow::nanobind_pyarrow nanobind_pyarrow::pyarrow)
 
 # Add O3
-target_compile_options(odin_stream_cpp PRIVATE -O3)
-
+# target_compile_options(odin_stream_cpp PRIVATE -O3)
 # Install directive for scikit-build-core
 # install(TARGETS odin_stream_cpp LIBRARY DESTINATION ".")
 
 
-set_property(
-  TARGET odin_stream_cpp
-  APPEND
-  PROPERTY INSTALL_RPATH "$ORIGIN/lib")
+# set_property(
+#   TARGET odin_stream_cpp
+#   APPEND
+#   PROPERTY INSTALL_RPATH "$ORIGIN/lib")
   
-install(CODE [[
-  file(GET_RUNTIME_DEPENDENCIES
-    LIBRARIES $<TARGET_FILE:odin_stream_cpp>
-    RESOLVED_DEPENDENCIES_VAR _r_deps
-    UNRESOLVED_DEPENDENCIES_VAR _u_deps
-  )
-  foreach(_file ${_r_deps})
-    if(_file MATCHES ".*lib(arrow|parquet).*\\.so")
-      file(INSTALL
-        DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
-        TYPE SHARED_LIBRARY
-        FOLLOW_SYMLINK_CHAIN
-        FILES "${_file}"
-      )
-    endif()
-  endforeach()
-  list(LENGTH _u_deps _u_length)
-  if("${_u_length}" GREATER 0)
-    message(WARNING "Unresolved dependencies detected!")
-  endif()
-]])
+# install(CODE [[
+#   file(GET_RUNTIME_DEPENDENCIES
+#     LIBRARIES $<TARGET_FILE:odin_stream_cpp>
+#     RESOLVED_DEPENDENCIES_VAR _r_deps
+#     UNRESOLVED_DEPENDENCIES_VAR _u_deps
+#   )
+#   foreach(_file ${_r_deps})
+#     if(_file MATCHES ".*lib(arrow|parquet).*\\.so")
+#       file(INSTALL
+#         DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
+#         TYPE SHARED_LIBRARY
+#         FOLLOW_SYMLINK_CHAIN
+#         FILES "${_file}"
+#       )
+#     endif()
+#   endforeach()
+#   list(LENGTH _u_deps _u_length)
+#   if("${_u_length}" GREATER 0)
+#     message(WARNING "Unresolved dependencies detected!")
+#   endif()
+# ]])
+
 
 install(TARGETS odin_stream_cpp LIBRARY DESTINATION .)

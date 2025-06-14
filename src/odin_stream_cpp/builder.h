@@ -29,7 +29,7 @@
 class GenericBuilder {
    public:
 	virtual void add_data(const uint8_t* data, size_t size) = 0;
-	virtual uint32_t get_datapoints() const = 0;
+	virtual uint32_t get_datapoint_count() const = 0;
 	virtual std::vector<std::pair<std::shared_ptr<arrow::Array>, std::shared_ptr<arrow::Field>>> finish() = 0;
 };
 
@@ -50,7 +50,7 @@ class PrimitiveBuilder : public GenericBuilder {
 	std::vector<std::pair<std::shared_ptr<arrow::Array>, std::shared_ptr<arrow::Field>>> finish();
 
 	size_t get_size() const { return type_descriptor->get_size(); }
-    uint32_t get_datapoints() const { return data_vector.size() / type_descriptor->get_size(); }
+    uint32_t get_datapoint_count() const { return data_vector.size() / type_descriptor->get_size(); }
 };
 
 class CompositeBuilder : public GenericBuilder {
@@ -62,14 +62,14 @@ class CompositeBuilder : public GenericBuilder {
 	CompositeBuilder(std::string name, std::shared_ptr<ParameterDescriptor> parameter);
 	void add_data(const uint8_t* data, size_t size);
 
-	uint32_t get_datapoints() const { 
+	uint32_t get_datapoint_count() const { 
         // Get the number of data points from the builders check they are all the same
         if (builders.empty()) {
             throw std::runtime_error("No builders available.");
         }
-        uint32_t datapoints = builders[0]->get_datapoints();
+        uint32_t datapoints = builders[0]->get_datapoint_count();
         for (const auto& builder : builders) {
-            if (builder->get_datapoints() != datapoints) {
+            if (builder->get_datapoint_count() != datapoints) {
                 throw std::runtime_error("Inconsistent number of data points across builders.");
             }
         }
