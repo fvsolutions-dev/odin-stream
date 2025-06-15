@@ -172,32 +172,32 @@ target_link_libraries(odin_stream_cpp PRIVATE nanobind_pyarrow::nanobind_pyarrow
 # install(TARGETS odin_stream_cpp LIBRARY DESTINATION ".")
 
 
-# set_property(
-#   TARGET odin_stream_cpp
-#   APPEND
-#   PROPERTY INSTALL_RPATH "$ORIGIN/lib")
+set_property(
+  TARGET odin_stream_cpp
+  APPEND
+  PROPERTY INSTALL_RPATH "$ORIGIN/lib")
   
-# install(CODE [[
-#   file(GET_RUNTIME_DEPENDENCIES
-#     LIBRARIES $<TARGET_FILE:odin_stream_cpp>
-#     RESOLVED_DEPENDENCIES_VAR _r_deps
-#     UNRESOLVED_DEPENDENCIES_VAR _u_deps
-#   )
-#   foreach(_file ${_r_deps})
-#     if(_file MATCHES ".*lib(arrow|parquet).*\\.so")
-#       file(INSTALL
-#         DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
-#         TYPE SHARED_LIBRARY
-#         FOLLOW_SYMLINK_CHAIN
-#         FILES "${_file}"
-#       )
-#     endif()
-#   endforeach()
-#   list(LENGTH _u_deps _u_length)
-#   if("${_u_length}" GREATER 0)
-#     message(WARNING "Unresolved dependencies detected!")
-#   endif()
-# ]])
+install(CODE [[
+  file(GET_RUNTIME_DEPENDENCIES
+    LIBRARIES $<TARGET_FILE:odin_stream_cpp>
+    RESOLVED_DEPENDENCIES_VAR _r_deps
+    UNRESOLVED_DEPENDENCIES_VAR _u_deps
+  )
+  foreach(_file ${_r_deps})
+    if(_file MATCHES ".*lib(arrow|parquet).*\\.so")
+      file(INSTALL
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
+        TYPE SHARED_LIBRARY
+        FOLLOW_SYMLINK_CHAIN
+        FILES "${_file}"
+      )
+    endif()
+  endforeach()
+  list(LENGTH _u_deps _u_length)
+  if("${_u_length}" GREATER 0)
+    message(WARNING "Unresolved dependencies detected!")
+  endif()
+]])
 
 
 install(TARGETS odin_stream_cpp LIBRARY DESTINATION .)
