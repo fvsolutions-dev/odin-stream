@@ -46,7 +46,7 @@ jobs:
     - uses: pypa/cibuildwheel@v2.22
 
       env:
-        CIBW_BUILD: cp312* cp313*
+        CIBW_BUILD: cp312* cp313* cp314*
         CIBW_SKIP: "*win32* *i686* *musllinux*"
         
     - name: Verify clean directory

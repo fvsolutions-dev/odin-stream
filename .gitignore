@@ -8,3 +8,7 @@ poetry.lock
 compile_commands.json
 .cache/
 **.odin
+
+# Generated at cmake configure time from `.env.in`. `.env.in` IS tracked; `.env` is not.
+.env
+dist/
