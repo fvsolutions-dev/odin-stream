@@ -29,6 +29,14 @@ endif()
 
 project(i_think_this_name_does_not_matter LANGUAGES C CXX)
 
+# Recent pyarrow headers (>=18) lean on C++20 (std::span, std::bit_width,
+# std::popcount, std::has_single_bit), so the consumer of pyarrow's headers
+# has to advertise C++20 too. Without this the build fails with
+# "‘span’ in namespace ‘std’ does not name a template type".
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 if (MSVC)
   set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreadedDLL CACHE STRING "" FORCE)
   add_compile_options(/EHsc)             # ensure exceptions are enabled
