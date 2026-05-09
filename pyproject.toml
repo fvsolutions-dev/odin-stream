@@ -8,12 +8,10 @@ readme = "README.md"
 dependencies = [
   "nanobind>=2.6.1",
   "polars>=1.27.1",
-  "pyarrow>=19.0.0,<20.0.0",
-  "scikit-build-core[pyproject]>=0.10.7,<0.11.0",
-  "nanobind>=2.5.0,<3.0.0",
-  "pytest>=8.3.4,<9.0.0",
-  "pytest-cov>=6.0.0,<7.0.0",
-  "pytest-benchmark>=5.1.0,<6.0.0",
+  # Upper bound dropped (was `<20.0.0`) so this package coexists with
+  # downstream consumers that need newer Arrow IPC features. The Arrow
+  # APIs touched by this codebase have been stable since 19.x.
+  "pyarrow>=19",
   "odin-db>=1.3.2",
 ]
 license = { text = "MPL-2.0" }
@@ -29,7 +27,7 @@ license = { text = "MPL-2.0" }
 
 
 [build-system]
-requires = ["scikit-build-core[pyproject]>=0.10", "nanobind>=1.3.2", "pyarrow>=19.0.0,<20.0.0"]
+requires = ["scikit-build-core[pyproject]>=0.10", "nanobind>=1.3.2", "pyarrow>=19"]
 build-backend = "scikit_build_core.build"
 
 [tool.scikit-build]
