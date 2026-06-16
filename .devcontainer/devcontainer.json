@@ -1,0 +1,43 @@
+{
+    "name": "odin-stream",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "remoteUser": "vscode",
+    "containerEnv": {
+        "CC": "clang",
+        "CXX": "clang++"
+    },
+    "mounts": [
+        "source=odin-stream-claude-config,target=/home/vscode/.claude,type=volume"
+    ],
+    "features": {
+        "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "charliermarsh.ruff",
+                "ms-vscode.cpptools",
+                "ms-vscode.cmake-tools",
+                "twxs.cmake",
+                "llvm-vs-code-extensions.vscode-clangd",
+                "tamasfe.even-better-toml",
+                "anthropic.claude-code",
+                "mhutchie.git-graph"
+            ],
+            "settings": {
+                "cmake.generator": "Ninja",
+                "cmake.buildDirectory": "${workspaceFolder}/build",
+                "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+                "python.testing.pytestEnabled": true,
+                "python.testing.pytestArgs": [
+                    "test"
+                ]
+            }
+        }
+    },
+    "postCreateCommand": "uv sync || true"
+}

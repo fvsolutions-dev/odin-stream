@@ -1,0 +1,13 @@
+{
+    "configurations": [
+        {
+            "name": "cmakelist - docker",
+            "compilerPath": "/usr/bin/cc",
+            "cStandard": "c17",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "linux-gcc-x64",
+            "compileCommands": "${workspaceFolder}/build/cp312-abi3-linux_x86_64/compile_commands.json"
+        }
+    ],
+    "version": 4
+}

@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python & C++: Current File Windows",
+      "type": "pythoncpp",
+      "request": "launch",
+      "pythonLaunchName": "Python: Main",
+      "cppAttachName": "(Windows) Attach",
+    },
+    {
+      "name": "Python & C++: Current File Linux",
+      "type": "pythoncpp",
+      "request": "launch",
+      "pythonLaunchName": "Python: Main",
+      "cppAttachName": "(Linux) Attach",
+    },
+    {
+      "name": "(Windows) Attach",
+      "type": "cppvsdbg",
+      "request": "attach",
+      "processId": ""
+    
+    },
+    {
+      "name": "(Linux) Attach",
+      "type": "cppdbg",
+      "request": "attach",
+      "processId": "",
+      "miDebuggerPath": "/usr/bin/gdb"
+    },
+    {
+      "name": "Python: Main",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "test/main.py",
+      "console": "integratedTerminal"
+    }
+  ]
+}
