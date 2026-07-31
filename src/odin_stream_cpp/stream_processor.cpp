@@ -1,5 +1,6 @@
 #include "stream_processor.h"
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 
@@ -35,6 +36,16 @@ static std::shared_ptr<PrimitiveTypeDescriptor> primitive_for_element_type(uint8
 	};
 	const char* name = (element_type < (sizeof(names) / sizeof(names[0]))) ? names[element_type] : "unknown";
 	return PrimitiveTypeDescriptor::get_by_name(name);
+}
+
+// Display name for an ODIN_element_type_t, for reporting rather than decoding.
+// Differs from primitive_for_element_type in two places on purpose: HEX keeps its
+// own name, and CUSTOM reads "custom" instead of collapsing to "unknown".
+static const char* element_type_name(uint8_t element_type) {
+	static const char* const names[] = {
+		"bool", "hex", "u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "f32", "f64", "char", "custom",
+	};
+	return (element_type < (sizeof(names) / sizeof(names[0]))) ? names[element_type] : "unknown";
 }
 
 void OdinStreamDecoder::process_identifier_ext(nb::bytes data) {
@@ -81,7 +92,7 @@ void OdinStreamDecoder::process_identifier_ext(nb::bytes data) {
 		}
 		std::string dotted_name(reinterpret_cast<const char*>(name), item.name_len);
 		learned_descriptors[item.index] = descriptor_for_ext_item(item.index, dotted_name, item.element_type, item.type_id);
-		p.ext_items[ordinal] = ExtItem{item.index, item.size};
+		p.ext_items[ordinal] = ExtItem{item.index, item.size, item.element_type, item.type_id};
 		ordinal++;
 		ptr = name + item.name_len;
 	}
@@ -416,6 +427,12 @@ void OdinStreamDecoder::process_packets(nb::list bytes_list) {
 							}
 						} else {
 							statistics.received_unresolved_data_packets++;
+							// Also record it against the identifier, so a caller can see
+							// WHICH set is starving rather than just a global total. The
+							// buffering gate above tests have_identifier/have_total_count,
+							// which a bare entry leaves false — so creating one here does
+							// not change what gets buffered.
+							pending[identifier].unresolved_data_packets++;
 						}
 					}
 
@@ -476,6 +493,84 @@ std::shared_ptr<ParameterMapDescriptor> OdinStreamDecoder::get_learned_descripto
 	return map;
 }
 
+std::map<uint16_t, SchemaProgress> OdinStreamDecoder::get_schema_progress() const {
+	std::map<uint16_t, SchemaProgress> progress_map;
+
+	// Union of both maps: an identifier resolved straight from the OdinDB never
+	// creates a `pending` entry, yet still has a built set worth reporting.
+	for (const auto& pair : pending) {
+		progress_map[pair.first].identifier = pair.first;
+	}
+	for (const auto& pair : parameter_sets_map) {
+		progress_map[pair.first].identifier = pair.first;
+	}
+
+	for (auto& entry : progress_map) {
+		const uint16_t identifier = entry.first;
+		SchemaProgress& progress = entry.second;
+		progress.complete = parameter_sets_map.find(identifier) != parameter_sets_map.end();
+
+		auto pending_it = pending.find(identifier);
+		if (pending_it == pending.end()) {
+			// Built from the OdinDB with no self-describing schema involved, so there
+			// is no wire-learned detail to report — only that it decodes.
+			continue;
+		}
+		const PendingIdentifier& p = pending_it->second;
+		progress.definition_identifier = p.definition_identifier;
+		progress.total_count = p.have_total_count ? p.total_count : 0;
+		progress.learned_count = static_cast<uint16_t>(p.ext_items.size());
+		progress.have_identifier = p.have_identifier;
+		progress.buffered_data_packets = static_cast<uint32_t>(p.data_packets.size());
+		progress.unresolved_data_packets = p.unresolved_data_packets;
+
+		// ext_items is ordinal-keyed and ordered, so this walks the schema in wire order.
+		for (const auto& item : p.ext_items) {
+			const ExtItem& ext = item.second;
+			ParameterProgress slot;
+			slot.ordinal = item.first;
+			slot.index = ext.index;
+			slot.size = ext.size;
+			slot.type = element_type_name(ext.element_type);
+			auto descriptor_it = learned_descriptors.find(ext.index);
+			if (descriptor_it != learned_descriptors.end()) {
+				slot.name = descriptor_it->second->get_name();
+			}
+			progress.parameters.push_back(slot);
+
+			if (ext.element_type == ELEMENT_TYPE_CUSTOM && learned_types.find(ext.type_id) == learned_types.end() &&
+			    std::find(progress.awaiting_type_ids.begin(), progress.awaiting_type_ids.end(), ext.type_id) ==
+			        progress.awaiting_type_ids.end()) {
+				progress.awaiting_type_ids.push_back(ext.type_id);
+			}
+		}
+
+		if (progress.total_count > 0) {
+			for (uint16_t ordinal = 0; ordinal < progress.total_count; ++ordinal) {
+				if (p.ext_items.find(ordinal) == p.ext_items.end()) {
+					progress.missing_ordinals.push_back(ordinal);
+				}
+			}
+		}
+
+		// Mirror try_build_from_ext's gates, in the same order, so the reported reason
+		// cannot disagree with why the build actually deferred.
+		if (progress.complete) {
+			continue;  // blocked_reason stays empty
+		}
+		if (progress.total_count == 0) {
+			progress.blocked_reason = "awaiting schema header";
+		} else if (progress.learned_count < progress.total_count || !progress.missing_ordinals.empty()) {
+			progress.blocked_reason = "awaiting schema chunks";
+		} else if (!progress.awaiting_type_ids.empty()) {
+			progress.blocked_reason = "awaiting type descriptor";
+		} else {
+			progress.blocked_reason = "awaiting identifier";
+		}
+	}
+	return progress_map;
+}
+
 std::shared_ptr<ParameterSet> OdinStreamDecoder::get_parameter_set(uint16_t identifier) {
 	auto it = parameter_sets_map.find(identifier);
 	if (it != parameter_sets_map.end()) {
@@ -506,7 +601,35 @@ void init_stream_processor(nb::module_& m) {
 		.def("get_parameter_set_identifiers", &OdinStreamDecoder::get_parameter_set_identifiers, "Get a list of all stored ParameterSet identifiers.")
 		.def("get_learned_descriptors", &OdinStreamDecoder::get_learned_descriptors,
 	         "Get the schema learned from self-describing (0x03) IDENTIFIER_EXT packets as a ParameterMapDescriptor.")
+		.def("get_schema_progress", &OdinStreamDecoder::get_schema_progress,
+	         "Get per-identifier schema completeness: what has been learned, what is still missing, and why DATA for it "
+	         "cannot be decoded yet. Returns a dict of identifier -> SchemaProgress.")
 		.def_ro("statistics", &OdinStreamDecoder::statistics, "Get the statistics of the stream processor.");
+
+	nb::class_<ParameterProgress>(m, "ParameterProgress")
+		.def(nb::init<>())
+		.def_ro("ordinal", &ParameterProgress::ordinal)
+		.def_ro("index", &ParameterProgress::index)
+		.def_ro("size", &ParameterProgress::size)
+		.def_ro("name", &ParameterProgress::name)
+		.def_ro("type", &ParameterProgress::type)
+		.def("__repr__", &ParameterProgress::repr);
+
+	nb::class_<SchemaProgress>(m, "SchemaProgress")
+		.def(nb::init<>())
+		.def_ro("identifier", &SchemaProgress::identifier)
+		.def_ro("definition_identifier", &SchemaProgress::definition_identifier)
+		.def_ro("total_count", &SchemaProgress::total_count)
+		.def_ro("learned_count", &SchemaProgress::learned_count)
+		.def_ro("complete", &SchemaProgress::complete)
+		.def_ro("have_identifier", &SchemaProgress::have_identifier)
+		.def_ro("missing_ordinals", &SchemaProgress::missing_ordinals)
+		.def_ro("awaiting_type_ids", &SchemaProgress::awaiting_type_ids)
+		.def_ro("buffered_data_packets", &SchemaProgress::buffered_data_packets)
+		.def_ro("unresolved_data_packets", &SchemaProgress::unresolved_data_packets)
+		.def_ro("blocked_reason", &SchemaProgress::blocked_reason)
+		.def_ro("parameters", &SchemaProgress::parameters)
+		.def("__repr__", &SchemaProgress::repr);
 
 	nb::class_<OdinStreamStatistics>(m, "OdinStreamStatistics")
 		.def(nb::init<>())

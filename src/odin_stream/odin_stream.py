@@ -36,6 +36,11 @@ class StreamProcessor:
         """Schema learned purely from the wire (0x03 IDENTIFIER_EXT packets)."""
         return self.processor.get_learned_descriptors()
 
+    def get_schema_progress(self) -> dict[int, odin_stream_cpp.SchemaProgress]:
+        """Per-identifier schema completeness, and what each set is still waiting on.
+        """
+        return self.processor.get_schema_progress()
+
     def process_bytes_list(self, data: list[bytes]):
         """
         Process a list of bytes and add them to the processor.
