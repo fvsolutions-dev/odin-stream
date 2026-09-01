@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15...3.26)
 
-# If ESP-IDF is reading this CMakeLists.txt, register it as an ESP-IDF component
-if(DEFINED ENV{IDF_PATH})
+# If ESP-IDF is reading this CMakeLists.txt, register it as an ESP-IDF component.
+if(ESP_PLATFORM)
   idf_component_register(SRCS 
     "src/embedded_odin_stream/stream_packet.c"
     "src/embedded_odin_stream/stream_parameter_set.c"
