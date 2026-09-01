@@ -83,8 +83,8 @@ skip = "*win32* *i686* *musllinux*"
 test-requires = ["pytest"]
 test-sources = ["test"]
 test-command = [
-  "python -c \"import odin_stream, odin_stream_cpp; print(odin_stream.pyarrow.__version__)\"",
-  "pytest test/test_composite_wire.py test/test_identifier_ext.py test/test_schema_progress.py",
+  "python -c \"import odin_stream, odin_stream_cpp; print('OK import, pyarrow', odin_stream.pyarrow.__version__)\"",
+  "pytest -q test/test_composite_wire.py test/test_identifier_ext.py test/test_schema_progress.py",
 ]
 
 [tool.cibuildwheel.linux]
@@ -98,12 +98,9 @@ manylinux-aarch64-image = "manylinux_2_28"
 repair-wheel-command = "auditwheel repair --exclude 'libarrow*' -w {dest_dir} {wheel}"
 
 [tool.cibuildwheel.macos]
-repair-wheel-command = "delocate-wheel --require-archs {delocate_archs} -e libarrow -w {dest_dir} -v {wheel}"
-
-# pyarrow's macOS wheels are macosx_12_0; building against an older target produces a
-# wheel tag that claims support the linked Arrow does not have.
-[tool.cibuildwheel.macos.environment]
-MACOSX_DEPLOYMENT_TARGET = "12.0"
+# No repair step on macOS. There is nothing to vendor -- Arrow comes from pyarrow at
+# runtime and libc++/libSystem ship with the OS
+repair-wheel-command = ""
 
 [tool.cibuildwheel.windows]
 # delvewheel still runs, so msvcp140.dll gets bundled (Python does not ship the MSVC
