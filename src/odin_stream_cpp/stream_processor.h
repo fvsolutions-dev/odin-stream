@@ -5,6 +5,7 @@
 #include <nanobind/stl/map.h>
 #include <nanobind/stl/shared_ptr.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 #include <nanobind_pyarrow/pyarrow_import.h>
 #include <nanobind_pyarrow/table.h>
 
@@ -48,6 +49,50 @@ class OdinStreamStatistics {
 	}
 };
 
+// One learned slot of a self-describing schema. `name`/`type` come from the
+// wire-learned descriptor, so they are empty/"unknown" until the 0x03 item (and,
+// for CUSTOM, its 0x04 type descriptor) has arrived.
+class ParameterProgress {
+   public:
+	uint16_t ordinal = 0;
+	uint32_t index = 0;
+	uint16_t size = 0;
+	std::string name;
+	std::string type;
+
+	std::string repr() const {
+		return "ParameterProgress(ordinal=" + std::to_string(ordinal) + ", index=" + std::to_string(index) +
+		       ", size=" + std::to_string(size) + ", name=" + name + ", type=" + type + ")";
+	}
+};
+
+// Completeness record for one parameter-set identifier: how much of its schema
+// has been learned, what it is still waiting on, and how much DATA that cost.
+// Answers "which data does not have enough information to decode yet, and why".
+class SchemaProgress {
+   public:
+	uint16_t identifier = 0;
+	uint32_t definition_identifier = 0;
+	uint16_t total_count = 0;    // 0 = no 0x03 header seen yet, so the total is unknown
+	uint16_t learned_count = 0;  // schema slots learned so far
+	bool complete = false;       // ParameterSet built, so DATA now decodes
+	bool have_identifier = false;  // a plain 0x01 IDENTIFIER is buffered
+	std::vector<uint16_t> missing_ordinals;
+	std::vector<uint16_t> awaiting_type_ids;  // CUSTOM type_ids whose 0x04 hasn't landed
+	uint32_t buffered_data_packets = 0;       // DATA held back, replayable once the schema resolves
+	uint32_t unresolved_data_packets = 0;     // DATA dropped outright: nothing pending for this id
+	std::string blocked_reason;               // empty when complete
+	std::vector<ParameterProgress> parameters;  // ordinal-ordered, only what is known
+
+	std::string repr() const {
+		return "SchemaProgress(identifier=" + std::to_string(identifier) + ", learned=" + std::to_string(learned_count) + "/" +
+		       std::to_string(total_count) + ", complete=" + (complete ? "True" : "False") +
+		       ", missing=" + std::to_string(missing_ordinals.size()) + ", awaiting_types=" + std::to_string(awaiting_type_ids.size()) +
+		       ", buffered_data=" + std::to_string(buffered_data_packets) + ", unresolved_data=" + std::to_string(unresolved_data_packets) +
+		       ", reason=" + (blocked_reason.empty() ? "-" : blocked_reason) + ")";
+	}
+};
+
 class OdinStreamDecoder {
    private:
 	std::unordered_map<uint16_t, std::shared_ptr<ParameterSet>> parameter_sets_map;
@@ -82,6 +127,8 @@ class OdinStreamDecoder {
 	struct ExtItem {
 		uint32_t index = 0;
 		uint16_t size = 0;
+		uint8_t element_type = 0;  // ODIN_element_type_t as carried on the wire
+		uint16_t type_id = 0;      // TYPE_DESCRIPTOR id when element_type is CUSTOM, else 0
 	};
 	struct PendingIdentifier {
 		nanobind::bytes identifier_bytes;        // last-seen raw 0x01 IDENTIFIER packet (if any)
@@ -90,7 +137,8 @@ class OdinStreamDecoder {
 		uint16_t total_count = 0;                    // expected parameter count (0 = unknown)
 		bool have_total_count = false;
 		uint32_t definition_identifier = 0;
-		std::map<uint16_t, ExtItem> ext_items;       // ordinal -> (index,size) learned from 0x03 chunks
+		std::map<uint16_t, ExtItem> ext_items;       // ordinal -> item learned from 0x03 chunks
+		uint32_t unresolved_data_packets = 0;        // DATA dropped for this id before anything was pending
 	};
 	std::unordered_map<uint16_t, PendingIdentifier> pending;
 
@@ -137,6 +185,11 @@ class OdinStreamDecoder {
 	// Expose the wire-learned schema so callers can inspect names/types decoded
 	// purely from the stream (no OdinDB).
 	std::shared_ptr<ParameterMapDescriptor> get_learned_descriptors() const;
+
+	// Per-identifier schema completeness: what has been learned, what is still
+	// missing, and why DATA for it cannot be decoded yet. Covers every identifier
+	// seen, whether its set is built or still pending.
+	std::map<uint16_t, SchemaProgress> get_schema_progress() const;
 
 	void clear_parameter_sets();
 

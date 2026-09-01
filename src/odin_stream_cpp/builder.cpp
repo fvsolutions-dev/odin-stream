@@ -57,11 +57,25 @@ void PrimitiveBuilder::add_data(const uint8_t *data, size_t size)
 template <typename ArrowType, typename BuilderType>
 arrow::Status PrimitiveBuilder::append_values(arrow::ArrayBuilder *builder, const uint8_t *data, size_t size)
 {
-	auto specific_builder = dynamic_cast<BuilderType *>(builder);
-	if (!specific_builder)
+	// Deliberately not dynamic_cast: it fails here on macOS for every numeric type.
+	//
+	// arrow::FloatBuilder and friends are aliases for the NumericBuilder<T> template,
+	// which carries no ARROW_EXPORT, so its typeinfo and vtable are emitted as weak
+	// symbols in this translation unit as well as inside libarrow. nanobind compiles the
+	// extension with hidden visibility, so our copies never merge with libarrow's at load
+	// time and two distinct typeinfos exist for the same type. libstdc++ compares
+	// typeinfo by string, so the cast happened to succeed on Linux; Apple's libc++
+	// compares by address, so it failed for all of them. (BooleanBuilder below is a real
+	// ARROW_EXPORT class, not a template, which is why only the numeric paths broke.)
+	//
+	// Comparing Arrow's own type id gives the same guarantee without RTTI. It is also
+	// already implied: MakeBuilder() in finish() was handed this exact arrow_type, and
+	// the caller switches on arrow_type->id(), so the concrete builder type follows.
+	if (builder->type()->id() != ArrowType::type_id)
 	{
 		return arrow::Status::TypeError("Internal error: Builder type mismatch.");
 	}
+	auto *specific_builder = static_cast<BuilderType *>(builder);
 
 	// Reinterpret cast and append
 	arrow::Status status = specific_builder->AppendValues(reinterpret_cast<const typename ArrowType::c_type *>(data), size / sizeof(typename ArrowType::c_type), nullptr);
@@ -108,12 +122,14 @@ void PrimitiveBuilder::add_data_to_builder(arrow::ArrayBuilder *builder, const u
 	case arrow::Type::BOOL: {
 		// Wire bools are one byte each; BooleanBuilder consumes them as raw
 		// bytes (zero/non-zero), not via the generic c_type template path.
-		auto *bool_builder = dynamic_cast<arrow::BooleanBuilder *>(builder);
-		if (!bool_builder)
+		// Type-id check rather than dynamic_cast, for consistency with append_values
+		// above -- see the note there on cross-library RTTI.
+		if (builder->type()->id() != arrow::BooleanType::type_id)
 		{
 			st = arrow::Status::TypeError("Internal error: Builder type mismatch.");
 			break;
 		}
+		auto *bool_builder = static_cast<arrow::BooleanBuilder *>(builder);
 		st = bool_builder->AppendValues(data, static_cast<int64_t>(size));
 		break;
 	}

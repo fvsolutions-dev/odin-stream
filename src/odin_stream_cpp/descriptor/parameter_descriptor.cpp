@@ -10,22 +10,23 @@
 
 #include <string>
 
-ParameterMapDescriptor::ParameterMapDescriptor(nanobind::dict parameter_map) {
-	for (const auto& item : parameter_map) {
+// `parameters` maps parameter id -> ParameterDescriptor.
+//
+// The previous version of this loop assigned into `parameter_map`, which named the
+// nanobind::dict argument rather than the member of the same name, so it mutated its
+// own input while iterating it and left the member map empty. It also stored bare
+// type descriptors, which are not ParameterDescriptors. It compiled only because
+// nanobind <= 2.6 still had `dict::operator[]` for integral keys; newer nanobind
+// dropped that overload, which is what finally surfaced the mistake.
+ParameterMapDescriptor::ParameterMapDescriptor(nanobind::dict parameters) {
+	for (const auto& item : parameters) {
 		uint32_t key = nanobind::cast<uint32_t>(item.first);
 
-		if (nanobind::isinstance<CompositeTypeDescriptor>(item.second)) {
-			parameter_map[key] = nanobind::cast<std::shared_ptr<CompositeTypeDescriptor>>(item.second);
-			continue;
-
-		} else if (nanobind::isinstance<PrimitiveTypeDescriptor>(item.second)) {
-			parameter_map[key] = nanobind::cast<std::shared_ptr<PrimitiveTypeDescriptor>>(item.second);
-			continue;
-		
-		} else {
-			// Handle the case where the type is not recognized
-			throw std::runtime_error("Unknown type descriptor in ParameterDefinition");
+		if (!nanobind::isinstance<ParameterDescriptor>(item.second)) {
+			throw std::runtime_error("ParameterMapDescriptor expects a dict of {id: ParameterDescriptor}");
 		}
+
+		parameter_map[key] = nanobind::cast<std::shared_ptr<ParameterDescriptor>>(item.second);
 	}
 }
 
@@ -63,8 +64,8 @@ void init_parameter_descriptor(nanobind::module_& m) {
 		.def("__repr__", &ParameterDescriptor::repr, "Get string representation of the parameter descriptor");
 	
 	nb::class_<ParameterMapDescriptor>(m, "ParameterMapDescriptor")
-		.def(nb::init<nb::dict>(), "parameter_map"_a, "Constructor for the ParameterMapDescriptor. Initializes with parameter map.")
-		.def(nb::init<>(), "Constructor for the ParameterMapDescriptor. Initializes with parameter map.")
+		.def(nb::init<nb::dict>(), "parameters"_a, "Construct from a dict of {parameter id: ParameterDescriptor}.")
+		.def(nb::init<>(), "Construct an empty map; fill it with add_parameter().")
 		.def("find_by_id", &ParameterMapDescriptor::find_by_id, "key"_a, "Get a ParameterDescriptor by its key.")
 		.def("find_by_name", &ParameterMapDescriptor::find_by_name, "name"_a, "Get a ParameterDescriptor by its name.")
 		.def("add_parameter", &ParameterMapDescriptor::add_parameter, "parameter"_a, "Add a parameter to the map.")

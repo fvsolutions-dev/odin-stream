@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15...3.26)
 
-# If ESP-IDF is reading this CMakeLists.txt, register it as an ESP-IDF component
-if(DEFINED ENV{IDF_PATH})
+# If ESP-IDF is reading this CMakeLists.txt, register it as an ESP-IDF component.
+if(ESP_PLATFORM)
   idf_component_register(SRCS 
     "src/embedded_odin_stream/stream_packet.c"
     "src/embedded_odin_stream/stream_parameter_set.c"
@@ -162,17 +162,31 @@ nanobind_add_module(
   src/odin_stream_cpp/descriptor/type_descriptor.cpp
   )
 
-nanobind_add_stub(
-  odin_stream_cpp_stub
-  INSTALL_TIME
-  MODULE odin_stream_cpp
-  OUTPUT odin_stream_cpp.pyi
-  PYTHON_PATH $<TARGET_FILE_DIR:odin_stream_cpp>
-  DEPENDS odin_stream_cpp 
-)
-
 target_include_directories(odin_stream_cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(odin_stream_cpp PRIVATE nanobind_pyarrow::nanobind_pyarrow nanobind_pyarrow::pyarrow)
+
+# Type stub.
+#
+# Deliberately NOT nanobind_add_stub(): its INSTALL_TIME mode runs stubgen from an
+# execute_process() with no result check, so any failure is swallowed and the wheel
+# silently ships without a .pyi. It also imports the extension in a bare interpreter,
+# which cannot find pyarrow's Arrow C++ libraries on Windows (no RPATH there). Both
+# problems go away by generating at build time through tools/gen_stub.py, which
+# preloads pyarrow first -- see the comment in that file.
+set(ODIN_STREAM_STUB "${CMAKE_CURRENT_BINARY_DIR}/odin_stream_cpp.pyi")
+add_custom_command(
+  OUTPUT "${ODIN_STREAM_STUB}"
+  COMMAND "${Python_EXECUTABLE}"
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_stub.py"
+          -q
+          -i "$<TARGET_FILE_DIR:odin_stream_cpp>"
+          -m odin_stream_cpp
+          -o "${ODIN_STREAM_STUB}"
+  DEPENDS odin_stream_cpp "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_stub.py"
+  COMMENT "Generating odin_stream_cpp.pyi"
+  VERBATIM)
+add_custom_target(odin_stream_cpp_stub ALL DEPENDS "${ODIN_STREAM_STUB}")
+install(FILES "${ODIN_STREAM_STUB}" DESTINATION .)
 
 # Add O3
 # target_compile_options(odin_stream_cpp PRIVATE -O3)
@@ -180,32 +194,26 @@ target_link_libraries(odin_stream_cpp PRIVATE nanobind_pyarrow::nanobind_pyarrow
 # install(TARGETS odin_stream_cpp LIBRARY DESTINATION ".")
 
 
+# We deliberately do NOT vendor Arrow C++ into the wheel.
+#
+# pyarrow is a hard runtime dependency, so its bundled libarrow / arrow.dll is always
+# present, and we link against exactly those. Copying a second set in would be worse
+# than useless: auditwheel and delvewheel both rename what they graft (libarrow-<hash>.so,
+# arrow-<hash>.dll), so the loader can no longer match it against the copy pyarrow has
+# already mapped, and the process ends up with two Arrow C++ runtimes -- two memory
+# pools, two type registries -- passing shared_ptr<arrow::Table> between them. Keeping
+# the linked names unmangled means the loader binds to pyarrow's single copy instead.
+# The flip side is that the wheel is tied to one Arrow soname, which is why pyproject.toml
+# pins pyarrow to the major version this was built against.
+#
+# The rpath below is what lets the extension resolve pyarrow's libraries on its own,
+# without something having imported pyarrow first: odin_stream_cpp installs to the
+# site-packages root, so pyarrow sits right next to it. Windows has no rpath equivalent
+# -- there, src/odin_stream/__init__.py calls os.add_dll_directory instead.
 set_property(
   TARGET odin_stream_cpp
   APPEND
-  PROPERTY INSTALL_RPATH "$ORIGIN/lib")
-  
-install(CODE [[
-  file(GET_RUNTIME_DEPENDENCIES
-    LIBRARIES $<TARGET_FILE:odin_stream_cpp>
-    RESOLVED_DEPENDENCIES_VAR _r_deps
-    UNRESOLVED_DEPENDENCIES_VAR _u_deps
-  )
-  foreach(_file ${_r_deps})
-    if(_file MATCHES ".*lib(arrow|parquet).*\\.so")
-      file(INSTALL
-        DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
-        TYPE SHARED_LIBRARY
-        FOLLOW_SYMLINK_CHAIN
-        FILES "${_file}"
-      )
-    endif()
-  endforeach()
-  list(LENGTH _u_deps _u_length)
-  if("${_u_length}" GREATER 0)
-    message(WARNING "Unresolved dependencies detected!")
-  endif()
-]])
+  PROPERTY INSTALL_RPATH "$<IF:$<PLATFORM_ID:Darwin>,@loader_path,$ORIGIN>/pyarrow")
 
 
 install(TARGETS odin_stream_cpp LIBRARY DESTINATION .)

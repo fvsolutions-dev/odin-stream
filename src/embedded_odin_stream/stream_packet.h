@@ -169,6 +169,7 @@ typedef struct
     uint8_t     element_type; // ODIN_element_type_t value
     uint16_t    size;        // field size in bytes
     uint16_t    offset;      // byte offset within the struct
+    const void *nested;      // unused here; keeps layout identical to ODIN_field_descriptor_t
 } stream_type_field_t;
 
 typedef struct
