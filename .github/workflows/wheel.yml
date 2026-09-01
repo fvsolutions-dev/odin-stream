@@ -1,19 +1,33 @@
 name: Wheels
 
 on:
-  # workflow_dispatch:
-  # pull_request:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
-     - master
-  # release:
-  #   types:
-  #     - published
+      - main
+  release:
+    types:
+      - published
 
+# A superseded push has nothing useful left to build. Releases are never cancelled.
+concurrency:
+  group: wheels-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
+
+permissions:
+  contents: read
+
+# Skip PRs that come from a fork, so only branches pushed to this repo build.
 jobs:
   build_sdist:
     name: Build SDist
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     steps:
     - uses: actions/checkout@v4
       with:
@@ -33,22 +47,29 @@ jobs:
   build_wheels:
     name: Wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest,  windows-latest]
+        os:
+          - ubuntu-latest      # linux x86_64
+          - ubuntu-24.04-arm   # linux aarch64
+          - windows-latest     # win_amd64
+          - macos-latest       # macosx arm64
 
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: true
 
-    - uses: pypa/cibuildwheel@v2.22
+    # Interpreter list, skip list, repair commands and the test command all live in
+    # [tool.cibuildwheel] in pyproject.toml, so a local `cibuildwheel` run reproduces
+    # this exactly. Nothing is overridden here -- note that setting CIBW_BUILD to an
+    # empty string would not fall back to pyproject.toml, it resolves to "*".
+    - uses: pypa/cibuildwheel@v4.2.0
 
-      env:
-        CIBW_BUILD: cp312* cp313* cp314*
-        CIBW_SKIP: "*win32* *i686* *musllinux*"
-        
     - name: Verify clean directory
       run: git diff --exit-code
       shell: bash
@@ -63,11 +84,17 @@ jobs:
     name: Upload if release
     needs: [build_wheels, build_sdist]
     runs-on: ubuntu-latest
+    # Without this the job publishes to PyPI on every push to main. The job name has
+    # always claimed to be release-gated; now it actually is.
+    if: github.event_name == 'release' && github.event.action == 'published'
     permissions:
       id-token: write
 
     steps:
     - uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+
     - uses: actions/download-artifact@v4
       with:
         path: dist

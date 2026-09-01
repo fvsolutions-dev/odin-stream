@@ -8,10 +8,13 @@ readme = "README.md"
 dependencies = [
   "nanobind>=2.6.1",
   "polars>=1.27.1",
-  # Upper bound dropped (was `<20.0.0`) so this package coexists with
-  # downstream consumers that need newer Arrow IPC features. The Arrow
-  # APIs touched by this codebase have been stable since 19.x.
-  "pyarrow>=19",
+  # Must stay in lockstep with the `[build-system]` pin below and cannot be widened.
+  # The extension links the Arrow C++ libraries out of the pyarrow wheel instead of
+  # vendoring them (see the rationale in CMakeLists.txt), so a built wheel only loads
+  # against the Arrow soname it was compiled for -- `libarrow.so.2500` / `arrow.dll`
+  # for pyarrow 25.x. A wider range would let pip produce installs that fail at import.
+  # Bumping the major here means republishing wheels.
+  "pyarrow>=25,<26",
   "odin-db>=1.3.2",
 ]
 license = { text = "MPL-2.0" }
@@ -27,19 +30,86 @@ license = { text = "MPL-2.0" }
 
 
 [build-system]
-requires = ["scikit-build-core[pyproject]>=0.10", "nanobind>=1.3.2", "pyarrow>=19"]
+requires = [
+  "scikit-build-core[pyproject]>=0.10",
+  # nanobind 3.x dropped `dict::operator[]` for integral keys; the source has been
+  # updated for that, but keep the floor at 2.7 so a build cannot silently pick an
+  # older nanobind whose API this no longer matches.
+  "nanobind>=2.7",
+  # Same major as the runtime dependency above -- the Arrow soname linked here is what
+  # the published wheel demands at import time.
+  "pyarrow>=25,<26",
+]
 build-backend = "scikit_build_core.build"
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
-cmake.build-type = "Debug"
+# Release is what gets published. For a local debug build, override on the command
+# line instead of editing this: `pip install --no-build-isolation -ve . -Ccmake.build-type=Debug`
+cmake.build-type = "Release"
 build-dir = "build/{wheel_tag}"
+# Emit a single abi3 wheel for CPython 3.12+ instead of one per minor version. This is
+# what the STABLE_ABI flag in CMakeLists.txt has always been asking for -- without this
+# setting nanobind still built a limited-API extension, but scikit-build-core tagged it
+# version-specific, so the wheel count never dropped.
+#
+# nanobind requires cp312 or later here and errors out on anything older. It also takes
+# its module suffix from SKBUILD_SOSABI, so the tag and the binary cannot disagree.
+# On 3.10/3.11 (below the limited API floor) scikit-build-core falls back to a normal
+# version-specific tag and nanobind drops the stable-ABI build to match.
+wheel.py-api = "cp312"
 
 
+# Kept here rather than in the workflow `env:` so that a local `cibuildwheel` run
+# reproduces CI exactly. The workflow only selects platform and Python versions.
 [tool.cibuildwheel]
 build-verbosity = 1
+# Covers all of `requires-python` (3.10+) in three builds rather than five: cp310 and
+# cp311 get version-specific wheels, and cp312 produces the abi3 wheel that pip will
+# also install on 3.13, 3.14 and later.
+#
+# cp313/cp314 are deliberately absent. cibuildwheel has no abi3 build-skip logic, so
+# listing them would rebuild the identically-named cp312-abi3 wheel and overwrite it --
+# no CI time saved, and the published artifact would be whichever interpreter ran last,
+# tested only on that one. Forward compatibility is instead guaranteed by the
+# abi3audit --strict pass cibuildwheel runs by default, which fails the build if the
+# extension touches anything outside the 3.12 limited API.
+build = "cp310-* cp311-* cp312-*"
+skip = "*win32* *i686* *musllinux*"
 
-# Needed for full C++17 support
+# Smoke test every wheel in a clean venv. This is the check that would have caught the
+# missing Windows DLL search path: it exercises the extension load and one round trip
+# across the Arrow boundary.
+test-requires = ["pytest"]
+test-sources = ["test"]
+test-command = [
+  "python -c \"import odin_stream, odin_stream_cpp; print(odin_stream.pyarrow.__version__)\"",
+  "pytest test/test_composite_wire.py test/test_identifier_ext.py test/test_schema_progress.py",
+]
+
+[tool.cibuildwheel.linux]
+# pyarrow publishes manylinux_2_28 wheels only. cibuildwheel >= 3.0 defaults to this
+# image, but pin it explicitly: on the older manylinux2014 default there is no
+# installable pyarrow and the build falls back to compiling Arrow from source.
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+# Graft everything except Arrow -- see the CMakeLists.txt note on why a second,
+# name-mangled Arrow C++ runtime in the process is worse than none.
+repair-wheel-command = "auditwheel repair --exclude 'libarrow*' -w {dest_dir} {wheel}"
+
+[tool.cibuildwheel.macos]
+repair-wheel-command = "delocate-wheel --require-archs {delocate_archs} -e libarrow -w {dest_dir} -v {wheel}"
+
+# pyarrow's macOS wheels are macosx_12_0; building against an older target produces a
+# wheel tag that claims support the linked Arrow does not have.
 [tool.cibuildwheel.macos.environment]
-MACOSX_DEPLOYMENT_TARGET = "10.14"
+MACOSX_DEPLOYMENT_TARGET = "12.0"
+
+[tool.cibuildwheel.windows]
+# delvewheel still runs, so msvcp140.dll gets bundled (Python does not ship the MSVC
+# C++ runtime and we cannot rely on pyarrow's hashed copy). Only Arrow is excluded;
+# src/odin_stream/__init__.py registers pyarrow's directory via os.add_dll_directory.
+# The exclude list is `;`-delimited, which cmd.exe would otherwise treat as a token
+# separator -- keep it quoted.
+repair-wheel-command = "delvewheel repair --exclude \"arrow.dll;arrow_python.dll\" -w {dest_dir} -v {wheel}"
 
